@@ -1,0 +1,25 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright 2006 PathScale, Inc. All Rights Reserved.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+#ifndef __SPIN_AM_INTERFACE_H__
+#define __SPIN_AM_INTERFACE_H__
+
+#include "spin-am.h"
+
+// Read+
+
+// Returns spin_t of type AM_CODE_FILE. (spin_t) NULL if call failed.
+extern spin_t am_open (void);
+
+// am_code_file must be of kind AM_CODE_FILE.
+extern spin_status_t am_close (spin_t am_code_file);
+
+// Read-
+
+// Write+
+// Write-
+
+#endif // __SPIN_AM_INTERFACE_H__

@@ -1,0 +1,16 @@
+To build:
+
+1) set the environment variable ADEV_ROOT to the root build directory
+
+2) build the libraries the reader links to using Makefile.tmod in the
+targia32_x8664 directory for the backend.
+
+ex:
+cd {base_dir}/targia32_x8664
+make -f Makefile.tmod
+
+these libraries will be copied to $(ADEV_ROOT)/pathscale_libs
+
+3) run the Makefile here.  This will create a atmod in this directory and
+attempt to copy it to $(ABSOFT)/bin.  If you do not have an ABSOFT directory,
+remove the copy line from the makefile.

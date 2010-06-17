@@ -1,0 +1,22 @@
+This system is developed and compiled under SLES9 on AMD64 machine
+
+[BUILD_INSTRUCTION]
+
+Before building anything, please setup the following environment
+variables:
+ABSOFT		such as /open-source/absoft/
+ABSOFT_FC       must be 1
+ADEV_ROOT       such as /home/yin/open-source/
+PATH            must be $ABSOFT/bin:$PATH
+
+then copy all files and directories of ABSOFT 10.1 compiler to $ABSOFT directory
+
+go to kpro64/targia32_x8664 directory
+
+run the following commands in order:
+make -f Makefile.acc PRODUCTION=1
+make -f Makefile.be PRODUCTION=1
+make -f Makefile.ipa PRODUCTION=1
+make -f Makefile.tmod PRODUCTION=1
+
+All targets will be copied into the corresponding directories.

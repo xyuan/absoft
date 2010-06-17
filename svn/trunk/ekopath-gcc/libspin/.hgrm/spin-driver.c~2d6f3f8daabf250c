@@ -1,0 +1,47 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright 2006 PathScale, Inc. All Rights Reserved.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+#include <stdio.h>
+
+#include "spin-interface.h"
+#include "spin-am-interface.h"
+
+int main(void) {
+
+  spin_t program = (spin_t) NULL;
+  spin_t machine_code = (spin_t) NULL;
+
+// AM development to be done after Phase 0
+#if 0
+  if (machine_code = am_open ())
+    printf ("am opened.\n");
+  else
+    printf ("am not opened.\n");
+
+  spin_pretty_print (machine_code);
+
+  if (am_close (machine_code) == SPIN_EXIT_SUCCESS)
+    printf ("am closed.\n");
+  else
+    printf ("am not closed.\n");
+#endif
+
+  //
+  
+  if ((program = spin_open ((FILE *) NULL)) != (spin_t) NULL)
+    printf ("libpin opened.\n");
+  else
+    printf ("libpin not opened.\n");
+ 
+  spin_pretty_print (program);
+
+  if (spin_close (program) != SPIN_EXIT_SUCCESS)
+    printf ("libspin not closed.\n");
+  else
+    printf ("libspin closed.\n");
+
+  return 0;  
+}

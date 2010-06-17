@@ -1,0 +1,132 @@
+# -*- Makefile -*-
+#
+#  Copyright (C) 2006 Absoft, Corp.  All Rights Reserved.
+#
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of version 2 of the GNU General Public License as
+#  published by the Free Software Foundation.
+#
+#  This program is distributed in the hope that it would be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+#
+#  Further, this software is distributed without any warranty that it is
+#  free of the rightful claim of any third person regarding infringement 
+#  or the like.  Any license provided herein, whether implied or 
+#  otherwise, applies only to this software file.  Patent licenses, if 
+#  any, provided herein do not apply to combinations of this program with 
+#  other software, or any other product whatsoever.  
+#
+#  You should have received a copy of the GNU General Public License along
+#  with this program; if not, write the Free Software Foundation, Inc., 59
+#  Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#
+#  Contact information:  Absoft corp., 2781 Bond St,
+#  Rochester Hills, MI 48309, or:
+#
+#  http://www.absoft.com
+#
+#
+
+ifndef PRODUCTION
+PRODUCTION=0
+endif
+ifndef NOUPDATE
+NOUPDATE=0
+endif
+
+MAKEFILE = makefile.x86linux
+
+ifndef PIC
+MODEL = 
+else
+MODEL = -fpic
+endif
+
+ifeq ($(PRODUCTION), 0)
+OPTIMIZE = -g $(MODEL)
+LIB = libamisc_x.a
+BUILDDIR = debug32
+SHLIB = libamisc_x.so
+SHBUILDDIR = picdebug32
+else
+OPTIMIZE = -O $(MODEL)
+LIB = libamisc.a
+BUILDDIR = production32
+SHLIB = libamisc.so
+SHBUILDDIR = picproduction32
+endif
+
+rule1:  default
+
+SRC_DIR=$(FIXDIR)..
+IOINC_DIR=$(FIXDIR)../../libfio/globsrc
+
+VPATH=$(SRC_DIR):
+
+INCLUDES = -I$(SRC_DIR) -I$(IOINC_DIR)
+
+ifeq ($(PRODUCTION), 0)
+CC  = gcc 
+else
+CC  = gcc 
+endif
+
+DEFINES = -DBYTESWAPPED -D_LITTLE_ENDIAN -D_ALCHEMY \
+
+CFLAGS = $(OPTIMIZE) \
+	 $(DEFINES) \
+	 $(INCLUDES)  
+        
+AR = ar
+
+SRC =	concat.c quad.c leadz.c
+INC =
+
+ALL_OBJ = concat.o quad.o leadz.o
+
+#########################################################################
+#									#
+#	the default rule, make sure making while logged to right	#
+#	system. If system is okay, recursively make compiler		#
+#									#
+#########################################################################
+
+default:$(BUILDDIR) $(SHBUILDDIR)
+ifeq ($(NOUPDATE), 0)
+	cd $(SRC_DIR); svn update
+endif
+	$(MAKE) -f ../$(MAKEFILE) -C $(BUILDDIR) FIXDIR=../ INCLUDEDEPEND=1 $(LIB)
+	$(MAKE) -f ../$(MAKEFILE) -C $(SHBUILDDIR) FIXDIR=../ INCLUDEDEPEND=1 PIC=1 $(SHLIB)
+
+$(BUILDDIR):
+	mkdir $(BUILDDIR)
+
+$(SHBUILDDIR):
+	mkdir $(SHBUILDDIR)
+
+clean:
+	-rm -f $(BUILDDIR)/*.o $(BUILDDIR)/*.a
+	-rm -f $(SHBUILDDIR)/*.o $(SHBUILDDIR)/*.so
+
+clobber:
+	-rm -rf $(BUILDDIR) $(SHBUILDDIR)
+
+
+$(LIB):	$(ALL_OBJ)
+	ar r $(LIB) $(ALL_OBJ)
+	cp $(LIB) $(ABSOFT)/lib
+
+$(SHLIB):	$(ALL_OBJ)
+	gcc -shared -o $(SHLIB) $(ALL_OBJ)
+	cp $(SHLIB) $(ABSOFT)/shlib
+
+# Automatic dependencies
+%.d: %.c
+	gcc -M $(DEFINES) $(INCLUDES) $< \
+	    | sed 's/\($*\)\.o[ :]*/\1.o $@ : /g' > $@; \
+	    [ -s $@ ] || rm -f $@
+
+ifdef INCLUDEDEPEND
+include $(SRC:.c=.d)
+endif

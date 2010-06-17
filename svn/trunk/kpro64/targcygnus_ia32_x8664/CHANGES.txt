@@ -1,0 +1,79 @@
+targcygnus_ia32_x8664/CONFIGURE:
+
+replaced
+
+set bk_root=`bk root`
+${bk_root}/pathscale/process-defs csh - | source /dev/stdin
+
+with
+
+source ./pdefs_csh
+ 
+===========pdefs_csh===============
+
+setenv PSC_MAJOR_VERSION "2"
+setenv PSC_MINOR_VERSION "1"
+setenv PSC_PATCH_LEVEL "0"
+setenv PSC_FULL_VERSION "2.1"
+setenv PSC_NAME_PREFIX "path"
+setenv PSC_TARGET "PSC_TARGET"
+setenv SC_GCC_VERSION "3.3.1"
+setenv PSC_INSTALL_PREFIX "~/psc_install"
+==============end file==================
+
+
+targcygnus_ia32_x8664/make:
+cygnus/bfd/ requires: /usr/include/sys/dir.h
+========================
+
+#ifndef _SYS_DIR_H
+#define _SYS_DIR_H
+
+#include <features.h>
+
+#include <dirent.h>
+#ifndef _DIRENT_HAVE_D_NAMLEN
+#define _D_EXACT_NAMLEN(d) ( strlen( (d)->d_name) )
+#endif
+
+
+#define direct dirent
+
+#endif // sys/dir.h
+==========end file =========================
+
+
+targcygnus_ia32_x8664/ld/Makefile:
+
+remove -ldl, replace libintl.a with /usr/lib/libintl.a and -liconv
+add -Wl,--allow-multiple-definition for linker
+
+diff of original Makefile and modified Makefile
+
+==============diff===============================
+$ diff Makefile_orig Makefile
+87c87
+< INTLDEPS = $(top_builddir)/../intl/libintl.a
+---
+> INTLDEPS = /usr/lib/libintl.a # $(top_builddir)/../intl/libintl.a
+114c114
+< INTLLIBS = $(top_builddir)/../intl/libintl.a
+---
+> INTLLIBS = -lintl -liconv #$(top_builddir)/../intl/libintl.a
+581c581
+< ld_new_LDFLAGS = -export-dynamic      # needed for IPA
+---
+> ld_new_LDFLAGS = -export-dynamic -Wl,--allow-multiple-definition -Wl,--out-implib=ipa_link.exe.a    # needed
+ for IPA
+712c712
+<       $(LINK) $(ld_new_LDFLAGS) $(ld_new_OBJECTS) $(ld_new_LDADD) $(LIBS) -ldl
+
+---
+>       $(LINK) $(ld_new_LDFLAGS) $(ld_new_OBJECTS) $(ld_new_LDADD) $(LIBS) #-ld
+l
+
+==============end diff=======================
+
+More, Change this to 
+
+LINK = $(LIBTOOL) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(LDFLAGS) -o ipa_link

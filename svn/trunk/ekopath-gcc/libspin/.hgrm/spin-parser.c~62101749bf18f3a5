@@ -1,0 +1,1307 @@
+// $Id: spin-parser.cxx,v 1.3 2006/01/03 03:24:09 anmol Exp $
+
+// A simple predictive, recursive descent parser essentially, to create an Eddy
+// instance for the Eddy to Whirl converter to operate upon.
+
+#include <stdio.h>
+#include <ctype.h>
+#include <string.h>
+#include <assert.h> // TODO: Include this only if testing ...
+#include <stdlib.h>
+
+#include "spin-parser.h"
+
+static long extract_integer (Buffer *buffered_program);
+
+static Eddy *chase_Link (Buffer *buffered_program);
+
+static Eddy *edify_Eddy_program(Buffer *buffered_program);
+static Eddy *edify_Eddy_identifier_node (Buffer *buffered_program);
+static Eddy *edify_Eddy_function_decl (Buffer *buffered_program);
+static Eddy *edify_Eddy_function_type (Buffer *buffered_program);
+static Eddy *edify_Eddy_integer_type (Buffer *buffered_program);
+static Eddy *edify_Eddy_integer_cst (Buffer *buffered_program);
+static Eddy *edify_Eddy_tree_list (Buffer *buffered_program);
+static Eddy *edify_Eddy_bind_expr (Buffer *buffered_program);
+static Eddy *edify_Eddy_return_expr (Buffer *buffered_program);
+static Eddy *edify_Eddy_var_decl (Buffer *buffered_program);
+static Eddy *edify_Eddy_type_decl (Buffer *buffered_program);
+static Eddy *edify_Eddy_void_type (Buffer *buffered_program);
+static Eddy *edify_Eddy_parm_decl (Buffer *buffered_program);
+static Eddy *edify_Eddy_decl_expr (Buffer *buffered_program);
+static Eddy *edify_Eddy_statement_list (Buffer *buffered_program);
+static Eddy *edify_Eddy_modify_expr (Buffer *buffered_program);
+static Eddy *edify_Eddy_result_decl (Buffer *buffered_program);
+static Eddy *edify_Eddy_plus_expr (Buffer *buffered_program);
+
+static Eddy_List *listify_statements (Buffer *buffered_program);
+static Eddy_List *listify_arg_type (Buffer *buffered_program);
+static Eddy_List *listify_Parm_decls (Buffer *buffered_program);
+
+// Consumes spaces, comments and returns with a pointer to one past
+// the end of a lexical unit.
+// If it reaches one past the end of the buffer, it returns.
+static inline Eddy_Token scan (Buffer *buffered_program) {
+
+  Eddy_Token token = Eddy_EOF;
+  char *p = buffered_program->buffer;
+  char *s = NULL;
+  unsigned int available_length = buffered_program->available_length;
+
+  while (available_length > 0) {
+
+    s = NULL;
+
+    // Newlines (for error reporting).
+    if (*p == '\n') {
+      
+      available_length--;
+      p++;
+      buffered_program->line_number++;
+      buffered_program->column_1 = p;
+      continue;
+
+    }
+
+    // Space (except newlines).
+    if (*p != '\n' && isspace (*p)) {
+
+      s = p;
+      while (p - s < available_length && *p != '\n' && isspace (*p)) p++;
+      available_length -= (p - s);
+      continue;
+
+    }
+
+    // Comments.
+    if (*p == '-' && available_length >= 2 && *(p+1) == '-') {
+      
+      s = p;
+      // Scan past the leading --     
+      p += 2;
+      while (p - s < available_length && *p != '\n') p++;
+
+      // Scan past the newline.
+      if (*p == '\n') { 
+
+        p++;
+        buffered_program->line_number++;
+        buffered_program->column_1 = p;
+
+      }
+
+      available_length -= (p - s);
+      continue;
+
+    }
+
+    // Node Types.
+    if (isalpha (*p) || *p == '_') {
+
+      s = p;
+      while (p - s < available_length && (isalnum (*p) || *p == '_')) p++;
+
+#define SET_TOKEN(name) \
+        if (strncmp (s, #name, strlen (#name)) == 0) \
+          token = (name)
+
+      SET_TOKEN (Eddy_nil);
+      SET_TOKEN (Eddy_link);
+      SET_TOKEN (Eddy_identifier_node);
+      SET_TOKEN (Eddy_integer_type);
+      SET_TOKEN (Eddy_integer_cst);
+      SET_TOKEN (Eddy_tree_list);
+      SET_TOKEN (Eddy_function_decl);
+      SET_TOKEN (Eddy_function_type);
+      SET_TOKEN (Eddy_pointer_type);
+      SET_TOKEN (Eddy_void_type);
+      SET_TOKEN (Eddy_parm_decl);
+      SET_TOKEN (Eddy_bind_expr);
+      SET_TOKEN (Eddy_var_decl);
+      SET_TOKEN (Eddy_decl_expr);
+      SET_TOKEN (Eddy_goto_expr);
+      SET_TOKEN (Eddy_label_expr);
+      SET_TOKEN (Eddy_label_decl);
+      SET_TOKEN (Eddy_statement_list);
+      SET_TOKEN (Eddy_modify_expr);
+      SET_TOKEN (Eddy_plus_expr);
+      SET_TOKEN (Eddy_indirect_ref);
+      SET_TOKEN (Eddy_convert_expr);
+      SET_TOKEN (Eddy_mult_expr);
+      SET_TOKEN (Eddy_nop_expr);
+      SET_TOKEN (Eddy_postincrement_expr);
+      SET_TOKEN (Eddy_cond_expr);
+      SET_TOKEN (Eddy_lt_expr);
+      SET_TOKEN (Eddy_return_expr);
+      SET_TOKEN (Eddy_result_decl);
+      SET_TOKEN (Eddy_program);
+      SET_TOKEN (Eddy_type_decl);
+
+      available_length -= (p - s);
+      break;
+
+    }
+
+    // String literals.
+    if (*p == '\"') {
+
+      s = p;
+      // Scan past the leading quote.
+      p++;
+      while (p - s < available_length && (*p != '\"')) p++;
+
+      if (p - s == available_length) {
+
+        PARSE_ERROR (buffered_program, "Unterminated string literal"); 
+        // Test what happens on a file with content [sic] "foo <EOF>
+
+      }
+
+      if (*p == '\"') p++; // Scan past the right quote. 
+      available_length -= (p - s);
+      token = Eddy_string_literal;
+      break;
+
+    }
+
+    // Single characters of interest: A minus sign or a '[' or a ']'
+    // Note that comments would already have been stripped off, 
+    // so break on a '-'.
+    if (*p == '[' || 
+        *p == ']' || 
+        *p == '-') {
+
+      s = p;
+      p++;
+      available_length--;
+
+      switch (*s) {
+       
+        case '[': token = Eddy_left_square_bracket;
+                  break; 
+
+        case ']': token = Eddy_right_square_bracket;
+                  break; 
+
+        case '-': token = Eddy_minus_sign;
+                  break;
+
+        default: assert (0); break;
+
+      }
+
+      break;
+
+    }
+
+    if (*p == '(' || *p == ')') {
+
+       s = p;
+       p++;
+       available_length--;
+       if (*s == '(') {
+
+         buffered_program->indentation_depth++;
+         continue;
+
+       }
+       else {
+
+         token = Eddy_end;
+         buffered_program->indentation_depth--;
+         break;
+
+       }
+
+    }
+
+    // Ignore decoration such as a ','.
+    // Any single character lexical unit to be ignored goes here.
+    if (*p == ',') {
+
+       p++;
+       available_length--;
+       continue;
+
+    }
+
+    // Digit Sequence.
+    if (isdigit (*p)) {
+
+      s = p;
+      while (p - s < available_length && isdigit (*p)) p++;
+      available_length -= (p - s); 
+      token = Eddy_digits;
+      break;
+
+    }
+
+    {
+      s = p;
+      p++;
+      available_length--;
+      token = Eddy_junk;
+      break;
+    }
+  }
+
+  buffered_program->buffer = p;
+  buffered_program->available_length = available_length;
+  buffered_program->current_token = token;
+  buffered_program->current_lexeme = s;
+
+  return token;
+
+}
+
+static long extract_integer (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+ int neg = 0;
+
+ token = scan (buffered_program);
+
+ if (LOOKAHEAD(buffered_program, Eddy_minus_sign)) { 
+
+   neg = 1;
+   token = scan (buffered_program);
+
+ }
+
+ if (!LOOKAHEAD(buffered_program, Eddy_digits)) {
+
+   PARSE_ERROR (buffered_program, "Expecting integer"); 
+   ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+
+   // What do we do out here? Return some arbit number? anyways things are hosed now.
+
+   return -10; // for now
+
+ }
+ else {
+ 
+   char aux[4096];
+
+   LOAD_LEXEME(aux, buffered_program);
+
+   // fprintf (stderr, "Extracted: %ld\n", neg == 0 ? atol (aux) : -1 * atol (aux));
+   return neg == 0 ? atol (aux) : -1 * atol (aux);
+
+ }
+
+}
+
+// edify is the top level call into the parsing mechanism.
+// The input file which has been presented as a character buffer
+// is translated into an equivalent (NULL terminated) array of 
+// Eddy structures.
+
+Eddy *edify (Buffer *buffered_program) {
+
+ Eddy_Token token;
+ Eddy *edified_program = NULL;
+
+#ifdef EDDY_SCANNER_TEST
+
+ // Dump out the scanned stuff onto stdout so that we can
+ // diff it out with the input file.
+
+ while (buffered_program->available_length > 0) {
+
+   token = scan (buffered_program);
+   if (token == Eddy_EOF)
+     printf ("Token: %d (Eddy_EOF)\n", token);
+   else
+     printf ("Token: %d\n", token);
+
+   if (buffered_program->current_lexeme) {
+
+     char aux[4096];
+
+     LOAD_LEXEME(aux, buffered_program);
+     printf ("%s\n", aux);
+
+   }
+
+ }
+ reset_Buffer (buffered_program);
+
+#endif
+
+ if ((token = scan (buffered_program)) == Eddy_program) {
+
+   edified_program = edify_Eddy_program (buffered_program);
+
+   if ((token = scan (buffered_program)) != Eddy_EOF) { 
+
+     PARSE_ERROR (buffered_program, 
+                  "Ignoring rest of file;"
+                  " found stuff after the Eddy_program construct");
+
+     ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+
+   }
+
+ }
+ else {
+
+   PARSE_ERROR (buffered_program, "Ignoring rest of file. Missing keyword: 'Eddy_program'");
+   ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+
+ }
+
+ return edified_program;
+
+}
+
+// Assumptions: buffered_program->eddy_table exists.
+static Eddy *edify_Eddy_program (Buffer *buffered_program) {
+
+ Eddy *edified_program = NULL, 
+      *edified_function_decl = NULL,
+      *edified_var_decl = NULL,
+      *edified_type_decl = NULL;
+
+ Eddy_Token token = Eddy_EOF;
+
+ CREATE_EDDY_NODE (edified_program);
+ SET_FLAVOUR (edified_program, Eddy_program);
+ SET_ID (buffered_program, edified_program);
+
+ token = scan (buffered_program);
+ if (LOOKAHEAD(buffered_program, Eddy_left_square_bracket)) {
+
+   // Since we see a Eddy_left_square_bracket token, we create the 
+   // eddy table for the rest of the compilation to use.
+
+   // NUM_EDDYS has to be the average number of 
+   // (decls + statements + expressions)
+
+#define NUM_EDDYS 1024
+
+   buffered_program->eddy_table = create_eddy_list (NUM_EDDYS);
+   assert (buffered_program->eddy_table);
+
+   // The rest of the compilation now has an eddy table.
+
+   token = scan (buffered_program);
+   while (!(LOOKAHEAD (buffered_program, Eddy_right_square_bracket)) &&
+          !(LOOKAHEAD (buffered_program, Eddy_EOF))) {
+
+     switch (token) {
+
+       case Eddy_function_decl: 
+  
+         edified_function_decl = edify_Eddy_function_decl (buffered_program);
+         break;
+
+       case Eddy_var_decl: 
+
+         edified_var_decl = edify_Eddy_var_decl (buffered_program);
+         break;
+
+       case Eddy_type_decl: 
+
+         edified_type_decl = edify_Eddy_type_decl (buffered_program);
+         break;
+
+       case Eddy_nil: break; // For now, ignore.
+
+       default: {
+ 
+         if (CURRENT_TOKEN(buffered_program) == Eddy_EOF) {
+
+           PARSE_ERROR (buffered_program, "Unexpected EOF");
+
+         }
+         else {
+
+           // This is going to give us the whole program from this point onwards but it's OK for now.
+           PARSE_ERROR (buffered_program, "Unexpected '%s'", CURRENT_LEXEME(buffered_program));
+
+         }
+         ERROR_RECOVERY (buffered_program, token, Eddy_end);
+
+       }
+
+     }
+
+     token = scan (buffered_program);
+
+   }
+
+   if (token == Eddy_right_square_bracket) {
+
+     token = scan (buffered_program);
+
+     if (token == Eddy_end) {
+
+       // All is well and we might as well assign the eddy_list to the
+       // Eddy_program node?
+       edified_program->content.list = buffered_program->eddy_table;
+       buffered_program->eddy_table = NULL;
+
+     }
+     else {
+
+       PARSE_ERROR (buffered_program, "Was expecting ')' 0");
+       ERROR_RECOVERY (buffered_program, token, Eddy_end);
+
+     }
+   }
+   else {
+
+     assert (token == Eddy_EOF);
+     // Things are doomed!
+
+   }
+ }
+ else {
+
+   YELL_N_RECOVER_On_Eddy_left_square_bracket (buffered_program);
+
+ }
+
+ // if (buffered_program->indentation_depth != 0) {
+ //   PARSE_ERROR (buffered_program, "Unmatched parenthesis in source file.");
+ // }
+
+ return edified_program;
+
+}
+
+static Eddy *edify_Eddy_function_decl (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+
+ // TODO - Make uppercase and uniform with the rest of the style
+ Eddy *edified_function_decl = NULL, 
+      *edified_identifier_node = NULL,
+      *edified_Eddy_function_type = NULL,
+      *edified_Eddy_bind_expr = NULL,
+      *edified_Eddy_result_decl = NULL;
+
+ Eddy_List *param_decls = NULL;
+
+ CREATE_EDDY_NODE (edified_function_decl);
+ SET_FLAVOUR (edified_function_decl, Eddy_function_decl);
+ SET_ID (buffered_program, edified_function_decl);
+
+ token = scan (buffered_program);
+ if (LOOKAHEAD(buffered_program, Eddy_identifier_node)) {
+
+   edified_identifier_node = edify_Eddy_identifier_node(buffered_program);
+   edified_function_decl->content.function_decl.name = edified_identifier_node;
+
+   token = scan (buffered_program);
+   if (LOOKAHEAD(buffered_program, Eddy_function_type)) {
+
+     edified_Eddy_function_type = edify_Eddy_function_type (buffered_program);
+     edified_function_decl->content.function_decl.type = edified_Eddy_function_type;
+
+     token = scan (buffered_program);
+     if (LOOKAHEAD(buffered_program, Eddy_left_square_bracket)) {
+
+       param_decls = listify_Parm_decls (buffered_program);
+       edified_function_decl->content.function_decl.param_decls = param_decls;
+
+       token = scan (buffered_program);
+       if (LOOKAHEAD(buffered_program, Eddy_bind_expr)) {
+
+         edified_Eddy_bind_expr = edify_Eddy_bind_expr (buffered_program);
+         edified_function_decl->content.function_decl.body = edified_Eddy_bind_expr;
+       
+         token = scan (buffered_program);
+         if (LOOKAHEAD(buffered_program, Eddy_result_decl) || 
+             LOOKAHEAD(buffered_program, Eddy_link)) {
+        
+           if (LOOKAHEAD(buffered_program, Eddy_result_decl)) 
+             edified_Eddy_result_decl = edify_Eddy_result_decl (buffered_program);
+           else
+             edified_Eddy_result_decl = chase_Link (buffered_program);
+
+           edified_function_decl->content.function_decl.return_value_decl = edified_Eddy_result_decl;
+
+           token = scan (buffered_program);
+           if (LOOKAHEAD(buffered_program, Eddy_end)) {
+
+             INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_function_decl);
+
+           }
+           else {
+
+             YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);
+
+           }
+         }
+         else {
+
+           PARSE_ERROR (buffered_program, "Was expecting a Eddy_result_decl");
+           ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+
+         }
+       }
+       else {
+
+         PARSE_ERROR (buffered_program, "Was expecting a Eddy_bind_expr");
+         ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+
+       }
+     }
+     else {
+
+       YELL_N_RECOVER_On_Eddy_left_square_bracket (buffered_program);
+
+     }
+   }
+   else {
+
+     PARSE_ERROR (buffered_program, "Expecting Eddy_function_type node for function");
+     ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+
+   }
+
+ }
+ else {
+
+    YELL_N_RECOVER_On_missing_Eddy_identifier_node(buffered_program); 
+
+ }
+
+}
+
+static Eddy *edify_Eddy_identifier_node (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+ Eddy *edified_identifier_node = NULL;
+
+ CREATE_EDDY_NODE (edified_identifier_node);
+ SET_FLAVOUR (edified_identifier_node, Eddy_identifier_node);
+ SET_ID (buffered_program, edified_identifier_node);
+
+ token = scan (buffered_program);
+ if (LOOKAHEAD(buffered_program, Eddy_string_literal)) {
+
+   edified_identifier_node->content.identifier = 
+     strndup (CURRENT_LEXEME(buffered_program) + 1, 
+              CURRENT_LEXEME_LENGTH(buffered_program) - 2); // +1 , -2 to eliminate the quotes 
+   // TODO: Verify that edified_identifier_node->content.identifier is null terminated
+
+   token = scan (buffered_program);
+   if (LOOKAHEAD(buffered_program, Eddy_end)) {
+     
+     INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_identifier_node);
+
+   }
+   else {
+
+     YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);
+
+   }
+ }
+ else {
+  
+   YELL_N_RECOVER_On_missing_string_literal (buffered_program); 
+
+ }
+
+ return edified_identifier_node;
+
+}
+
+static Eddy *edify_Eddy_function_type (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+
+ Eddy *edified_Eddy_function_type = NULL,
+      *edified_Eddy_integer_type = NULL;
+
+ Eddy_List *arg_type = NULL;
+
+ CREATE_EDDY_NODE (edified_Eddy_function_type);
+ SET_FLAVOUR (edified_Eddy_function_type, Eddy_function_type);
+ SET_ID (buffered_program, edified_Eddy_function_type);
+
+ token = scan (buffered_program);
+ switch (token) {
+
+   case Eddy_integer_type:
+
+     edified_Eddy_integer_type = edify_Eddy_integer_type (buffered_program);
+     edified_Eddy_function_type->content.function_type.return_type = edified_Eddy_integer_type;
+     break;
+
+   default: 
+
+     assert (0);
+     break;
+
+ }
+
+ token = scan (buffered_program);
+ if (LOOKAHEAD(buffered_program, Eddy_left_square_bracket)) {
+
+   arg_type = listify_arg_type (buffered_program);
+   edified_Eddy_function_type->content.function_type.arg_type = arg_type;
+ 
+   token = scan (buffered_program);
+   if (LOOKAHEAD(buffered_program, Eddy_end)) {
+
+     INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_Eddy_function_type);
+
+   }
+   else {
+
+     YELL_N_RECOVER_On_missing_right_parenthesis (buffered_program);
+
+   }
+ }
+ else {
+
+   YELL_N_RECOVER_On_Eddy_left_square_bracket (buffered_program);
+
+ }
+
+ return edified_Eddy_function_type;
+
+}
+
+static Eddy *edify_Eddy_integer_type (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+
+ Eddy *edified_Eddy_integer_type = NULL,
+      *edified_Eddy_integer_cst_min = NULL,
+      *edified_Eddy_integer_cst_max = NULL;
+
+ long precision;
+
+ CREATE_EDDY_NODE (edified_Eddy_integer_type);
+ SET_FLAVOUR (edified_Eddy_integer_type, Eddy_integer_type);
+ SET_ID (buffered_program, edified_Eddy_integer_type);
+
+ token = scan (buffered_program);
+ if (LOOKAHEAD(buffered_program, Eddy_integer_cst)) {
+
+   edified_Eddy_integer_cst_min = edify_Eddy_integer_cst (buffered_program);
+   edified_Eddy_integer_type->content.integer_type.min_value = edified_Eddy_integer_cst_min; 
+ 
+   token = scan (buffered_program);
+   if (LOOKAHEAD(buffered_program, Eddy_integer_cst)) {
+
+     edified_Eddy_integer_cst_max = edify_Eddy_integer_cst (buffered_program);
+     edified_Eddy_integer_type->content.integer_type.max_value = edified_Eddy_integer_cst_max;
+
+     precision = extract_integer (buffered_program);
+     if (precision <= 0) 
+       PARSE_ERROR (buffered_program, "Cannot have non positive precision: %ld", precision);
+     // Anyways use the value that you got.
+     edified_Eddy_integer_type->content.integer_type.precision = precision;
+
+     token = scan (buffered_program);
+     if (LOOKAHEAD(buffered_program, Eddy_end)) {
+     
+       INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_Eddy_integer_type);
+
+     }
+     else {
+
+       YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);
+
+     }
+   }
+   else {
+     YELL_N_RECOVER_On_missing_Eddy_integer_cst (buffered_program);
+   }
+ }
+ else {
+   YELL_N_RECOVER_On_missing_Eddy_integer_cst (buffered_program);
+ }
+
+ return edified_Eddy_integer_type;
+
+}
+
+static Eddy *edify_Eddy_integer_cst (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+ 
+ Eddy *edified_Eddy_integer_cst = NULL;
+
+ long int low;
+ long int high;
+
+ CREATE_EDDY_NODE (edified_Eddy_integer_cst);
+ SET_FLAVOUR (edified_Eddy_integer_cst, Eddy_integer_cst);
+ SET_ID (buffered_program, edified_Eddy_integer_cst);
+
+ low = extract_integer (buffered_program);
+ high = extract_integer (buffered_program);
+
+ edified_Eddy_integer_cst->content.integer_cst.low = low;
+ edified_Eddy_integer_cst->content.integer_cst.high = high;
+
+ token = scan (buffered_program);
+ if (LOOKAHEAD (buffered_program, Eddy_end)) {
+ 
+   INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_Eddy_integer_cst);
+
+ }
+ else {
+
+   YELL_N_RECOVER_On_missing_right_parenthesis (buffered_program);
+
+ }
+
+ return edified_Eddy_integer_cst;
+
+}
+
+#define LISTIFY(suffix, list_type, length)                                     \
+static Eddy_List *listify_##suffix (Buffer *buffered_program) {                \
+                                                                               \
+ Eddy_Token token = Eddy_EOF;                                                  \
+ Eddy *edified_##list_type = NULL;                                             \
+ Eddy_List *suffix = NULL;                                                     \
+                                                                               \
+ int i = 0;                                                                    \
+                                                                               \
+ suffix = create_eddy_list (length);                                           \
+ assert (suffix);                                                              \
+ token = scan (buffered_program);                                              \
+ while (!(LOOKAHEAD (buffered_program, Eddy_EOF)) &&                           \
+        !(LOOKAHEAD (buffered_program, Eddy_right_square_bracket))) {          \
+                                                                               \
+   if (LOOKAHEAD (buffered_program, list_type) ||                              \
+       LOOKAHEAD (buffered_program, Eddy_nil)) {                               \
+                                                                               \
+     if (!(LOOKAHEAD (buffered_program, Eddy_nil))) {                          \
+                                                                               \
+       edified_##list_type = edify_##list_type (buffered_program);             \
+       insert_eddy_node (suffix, i, edified_ ## list_type);                    \
+                                                                               \
+     }                                                                         \
+                                                                               \
+   }                                                                           \
+   else {                                                                      \
+                                                                               \
+     PARSE_ERROR (buffered_program, "Expecting " # list_type);                 \
+     ERROR_RECOVERY (buffered_program, token, Eddy_EOF);                       \
+                                                                               \
+   }                                                                           \
+                                                                               \
+   token = scan (buffered_program);                                            \
+   i++;                                                                        \
+                                                                               \
+ }                                                                             \
+ if (LOOKAHEAD (buffered_program, Eddy_right_square_bracket)) {                \
+   /* Success */                                                               \
+ }                                                                             \
+ else {                                                                        \
+                                                                               \
+   assert (token == Eddy_EOF);                                                 \
+                                                                               \
+ }                                                                             \
+                                                                               \
+ return suffix;                                                                \
+                                                                               \
+}
+
+// H&P say that functions typically take 4 args - so go by that. 
+#define EXPECTED_NUM_ARGS 4
+LISTIFY(arg_type, Eddy_tree_list, EXPECTED_NUM_ARGS)
+LISTIFY(Parm_decls, Eddy_parm_decl, EXPECTED_NUM_ARGS)
+
+#define EXPECTED_NUM_VARIABLES_PER_BLOCK 8   
+LISTIFY(Var_decls, Eddy_var_decl, EXPECTED_NUM_VARIABLES_PER_BLOCK)
+                                                               
+static Eddy *edify_Eddy_tree_list (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+ Eddy *edified_Tree_list = NULL,
+      *link = NULL,
+      *edified_Eddy_void_type = NULL;
+
+ CREATE_EDDY_NODE (edified_Tree_list);
+ SET_FLAVOUR (edified_Tree_list, Eddy_tree_list);
+ SET_ID (buffered_program, edified_Tree_list);
+
+ token = scan (buffered_program);
+ switch (token) {
+
+   case Eddy_link:
+     
+     link = chase_Link (buffered_program);
+     edified_Tree_list->content.tree_value = link;
+     break;
+
+   case Eddy_void_type:
+
+     edified_Eddy_void_type = edify_Eddy_void_type (buffered_program);
+     edified_Tree_list->content.tree_value = edified_Eddy_void_type;
+     break;
+
+   default:
+ 
+     assert (0);
+     break;
+ }
+
+ token = scan (buffered_program);
+ if (LOOKAHEAD(buffered_program, Eddy_end)) {
+                                                                                                                                                        
+   INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_Tree_list);
+                                                                                                                                                        
+ }
+ else {
+                                                                                                                                                        
+   YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);
+                                                                                                                                                        
+ }
+ 
+ return edified_Tree_list;
+
+}
+
+static Eddy *chase_Link (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+ Eddy *link = NULL;
+ long int eddy_table_index;
+
+ eddy_table_index = extract_integer (buffered_program);
+ if (eddy_table_index < 0) {
+
+   PARSE_ERROR (buffered_program, "Link appears with negative node id.");
+   ERROR_RECOVERY (buffered_program, token, Eddy_end);
+
+ }
+ else {
+
+  link = lookup_eddy_node (EDDY_TABLE (buffered_program), eddy_table_index);
+
+ }
+
+ token = scan (buffered_program); 
+ if (LOOKAHEAD(buffered_program, Eddy_end)) {
+   
+   // Things look good!
+
+ }
+ else {
+
+   YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);
+
+ }
+
+ return link;
+
+}
+
+static Eddy *edify_Eddy_void_type (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+ Eddy *edified_Eddy_void_type = NULL;
+
+ CREATE_EDDY_NODE (edified_Eddy_void_type);
+ SET_FLAVOUR (edified_Eddy_void_type, Eddy_void_type);
+ SET_ID (buffered_program, edified_Eddy_void_type);
+
+ token = scan (buffered_program);
+ if (LOOKAHEAD(buffered_program, Eddy_end)) {
+   
+   // Things look good!
+   INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_Eddy_void_type);
+
+ }
+ else {
+
+   YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);
+
+ }
+
+ return edified_Eddy_void_type;
+
+}
+
+#define EDIFY_DECL(flavour, prefix)                                            \
+static Eddy *edify_##flavour (Buffer *buffered_program) {                      \
+                                                                               \
+ Eddy_Token token = Eddy_EOF;                                                  \
+ Eddy *edified_##flavour = NULL,                                               \
+      *type = NULL,                                                            \
+      *name = NULL;                                                            \
+                                                                               \
+ CREATE_EDDY_NODE (edified_##flavour);                                         \
+ SET_FLAVOUR (edified_##flavour, flavour);                                     \
+ SET_ID (buffered_program, edified_##flavour);                                 \
+                                                                               \
+ token = scan (buffered_program);                                              \
+ switch (token) {                                                              \
+                                                                               \
+   case Eddy_link:                                                             \
+                                                                               \
+     type = chase_Link (buffered_program);                                     \
+     break;                                                                    \
+                                                                               \
+   default:                                                                    \
+                                                                               \
+     assert (0);                                                               \
+     break;                                                                    \
+                                                                               \
+ }                                                                             \
+ edified_##flavour->content.prefix##_decl.type = type;                         \
+                                                                               \
+ token = scan (buffered_program);                                              \
+                                                                               \
+ /* TODO: If it's a Eddy_result_decl then we might get a Eddy_nil for an anonymous variable. */ \
+                                                                               \
+ if (LOOKAHEAD(buffered_program, Eddy_identifier_node) ||                      \
+     (flavour == Eddy_result_decl && LOOKAHEAD(buffered_program, Eddy_nil))) { \
+                                                                               \
+   if (LOOKAHEAD(buffered_program, Eddy_identifier_node))                      \
+     name = edify_Eddy_identifier_node (buffered_program);                     \
+                                                                               \
+   edified_##flavour->content.prefix##_decl.name = name;                       \
+                                                                               \
+   token = scan (buffered_program);                                            \
+   if (LOOKAHEAD(buffered_program, Eddy_end)) {                                \
+                                                                               \
+     INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_##flavour); \
+                                                                               \
+   }                                                                           \
+   else {                                                                      \
+                                                                               \
+     YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);            \
+                                                                               \
+   }                                                                           \
+ }                                                                             \
+ else {                                                                        \
+                                                                               \
+    YELL_N_RECOVER_On_missing_Eddy_identifier_node(buffered_program);          \
+                                                                               \
+ }                                                                             \
+                                                                               \
+ return edified_##flavour;                                                     \
+                                                                               \
+}
+
+EDIFY_DECL (Eddy_parm_decl, parm)
+EDIFY_DECL (Eddy_result_decl, result)
+EDIFY_DECL (Eddy_var_decl, var)
+
+static Eddy *edify_Eddy_bind_expr (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+ Eddy *edified_Eddy_bind_expr = NULL;
+ Eddy_List *var_decls = NULL;
+ Eddy *body = NULL;
+
+ CREATE_EDDY_NODE (edified_Eddy_bind_expr);
+ SET_FLAVOUR (edified_Eddy_bind_expr, Eddy_bind_expr);
+ SET_ID (buffered_program, edified_Eddy_bind_expr);
+
+ token = scan (buffered_program);
+ if (LOOKAHEAD(buffered_program, Eddy_left_square_bracket)) {
+
+   var_decls = listify_Var_decls (buffered_program);
+   token = scan (buffered_program);
+   if (LOOKAHEAD(buffered_program, Eddy_statement_list)) {
+
+     body = edify_Eddy_statement_list (buffered_program);
+     token = scan (buffered_program);
+     if (LOOKAHEAD(buffered_program, Eddy_end)) {
+    
+       edified_Eddy_bind_expr->content.bind_expr.var_decls = var_decls;
+       edified_Eddy_bind_expr->content.bind_expr.body = body;
+       INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_Eddy_bind_expr);
+
+     }
+     else {
+
+       YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);
+
+     }
+   }
+   else {
+
+     YELL_N_RECOVER_On_missing_Eddy_statement_list (buffered_program);
+
+   }
+
+ }
+ else {
+
+   YELL_N_RECOVER_On_Eddy_left_square_bracket (buffered_program);
+
+ }
+
+ return edified_Eddy_bind_expr;
+
+}
+
+static Eddy *edify_Eddy_statement_list (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+ Eddy *edified_Eddy_statement_list = NULL;
+ Eddy_List *statement_list = NULL;
+
+ CREATE_EDDY_NODE (edified_Eddy_statement_list);
+ SET_FLAVOUR (edified_Eddy_statement_list, Eddy_statement_list);
+ SET_ID (buffered_program, edified_Eddy_statement_list);
+
+ token = scan (buffered_program);
+ if (LOOKAHEAD(buffered_program, Eddy_left_square_bracket)) {
+
+   statement_list = listify_statements (buffered_program);
+   token = scan (buffered_program);
+   if (LOOKAHEAD(buffered_program, Eddy_end)) {
+
+     edified_Eddy_statement_list->content.list = statement_list;
+     INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_Eddy_statement_list);
+
+   }
+   else {
+
+     YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);
+
+   }
+ }
+ else {
+
+   YELL_N_RECOVER_On_Eddy_left_square_bracket (buffered_program);
+
+ }
+
+ return edified_Eddy_statement_list;
+
+}
+
+static Eddy_List *listify_statements (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+ Eddy_List *statement_list = NULL;
+ Eddy *edified_statement = NULL;
+ int i = 0;
+
+// Expected statement count in a compound statement
+#define STATEMENT_COUNT 16
+
+ statement_list = create_eddy_list (STATEMENT_COUNT);
+ assert (statement_list);
+
+ token = scan (buffered_program);
+ while (!(LOOKAHEAD (buffered_program, Eddy_EOF)) &&                          
+        !(LOOKAHEAD (buffered_program, Eddy_right_square_bracket))) {
+
+   edified_statement = NULL;
+
+   switch (token) {
+
+     case Eddy_decl_expr: 
+
+       edified_statement = edify_Eddy_decl_expr (buffered_program);
+
+       break;
+
+     case Eddy_modify_expr: 
+
+       edified_statement = edify_Eddy_modify_expr (buffered_program);
+       break;
+
+     case Eddy_return_expr: 
+ 
+       edified_statement = edify_Eddy_return_expr (buffered_program);
+       break;
+
+     case Eddy_nil: 
+
+       // Ignore.
+       break;
+
+     default: 
+
+       fprintf (stderr, "Unhandled %s\n", CURRENT_LEXEME(buffered_program));
+       assert (0); 
+       break;
+
+   }
+
+   if (edified_statement != NULL)
+     insert_eddy_node (statement_list, i, edified_statement);
+
+   token = scan (buffered_program);
+   i++;
+
+ }
+ if (LOOKAHEAD (buffered_program, Eddy_right_square_bracket)) {                     
+   /* Success */                                                               
+ }                                                                             
+ else {                                                                        
+                                                                               
+   assert (token == Eddy_EOF);                                                 
+                                                                               
+ }                                                                             
+
+ return statement_list;
+
+}
+
+#define EDIFY_ARITY_2_EXPR(flavour, prefix)                                    \
+static Eddy *edify_##flavour (Buffer *buffered_program) {                      \
+                                                                               \
+ Eddy_Token token = Eddy_EOF;                                                  \
+ Eddy *prefix##_expr[2] = { NULL, NULL };                                      \
+ Eddy *edified_##flavour = NULL;                                               \
+                                                                               \
+ CREATE_EDDY_NODE (edified_##flavour);                                         \
+ SET_FLAVOUR (edified_##flavour, flavour);                                     \
+ SET_ID (buffered_program, edified_##flavour);                                 \
+                                                                               \
+ token = scan (buffered_program);                                              \
+ switch (token) {                                                              \
+                                                                               \
+   case Eddy_link:                                                             \
+                                                                               \
+     prefix##_expr [0] = chase_Link (buffered_program);                        \
+     break;                                                                    \
+                                                                               \
+   case Eddy_result_decl:                                                      \
+                                                                               \
+     prefix##_expr [0] = edify_Eddy_result_decl (buffered_program);            \
+     break;                                                                    \
+                                                                               \
+   default:                                                                    \
+                                                                               \
+     assert(0);                                                                \
+     break;                                                                    \
+ }                                                                             \
+                                                                               \
+ token = scan (buffered_program);                                              \
+ switch (token) {                                                              \
+                                                                               \
+   case Eddy_link:                                                             \
+                                                                               \
+     prefix##_expr [1] = chase_Link (buffered_program);                        \
+     break;                                                                    \
+                                                                               \
+   case Eddy_plus_expr:                                                        \
+                                                                               \
+     prefix##_expr [1] = edify_Eddy_plus_expr (buffered_program);              \
+     break;                                                                    \
+                                                                               \
+   default:                                                                    \
+                                                                               \
+     assert(0);                                                                \
+     break;                                                                    \
+                                                                               \
+ }                                                                             \
+                                                                               \
+ token = scan (buffered_program);                                              \
+ if (LOOKAHEAD(buffered_program, Eddy_end)) {                                  \
+                                                                               \
+   edified_##flavour->content.prefix##_expr [0] = prefix##_expr [0];           \
+   edified_##flavour->content.prefix##_expr [1] = prefix##_expr [1];           \
+   INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_##flavour);         \
+                                                                               \
+ }                                                                             \
+ else {                                                                        \
+                                                                               \
+   YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);              \
+                                                                               \
+ }                                                                             \
+                                                                               \
+ return edified_##flavour;                                                     \
+                                                                               \
+}
+
+EDIFY_ARITY_2_EXPR (Eddy_modify_expr, modify)
+EDIFY_ARITY_2_EXPR (Eddy_plus_expr, plus)
+EDIFY_ARITY_2_EXPR (Eddy_mult_expr, mult)
+EDIFY_ARITY_2_EXPR (Eddy_postincrement_expr, postincrement)
+EDIFY_ARITY_2_EXPR (Eddy_lt_expr, lt)
+
+static Eddy *edify_Eddy_decl_expr (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+ Eddy *edified_Eddy_decl_expr = NULL;
+
+ CREATE_EDDY_NODE (edified_Eddy_decl_expr);
+ SET_FLAVOUR (edified_Eddy_decl_expr, Eddy_decl_expr);
+ SET_ID (buffered_program, edified_Eddy_decl_expr);
+
+ token = scan (buffered_program);
+ switch (token) {
+
+   case Eddy_link:
+
+     edified_Eddy_decl_expr->content.decl_expr = chase_Link (buffered_program);
+     break;
+
+   default:
+
+     assert (0);
+     break;
+
+ }
+  
+ token = scan (buffered_program);
+ if (LOOKAHEAD(buffered_program, Eddy_end)) {
+
+   INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_Eddy_decl_expr);
+
+ }
+ else {
+
+   YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);
+
+ }
+
+ return edified_Eddy_decl_expr;
+
+}
+
+static Eddy *edify_Eddy_return_expr (Buffer *buffered_program) {
+
+ Eddy_Token token = Eddy_EOF;
+ Eddy *edified_Eddy_return_expr = NULL;
+
+ CREATE_EDDY_NODE (edified_Eddy_return_expr);
+ SET_FLAVOUR (edified_Eddy_return_expr, Eddy_return_expr);
+ SET_ID (buffered_program, edified_Eddy_return_expr);
+
+ token = scan (buffered_program);
+ switch (token) {
+
+   case Eddy_modify_expr:
+
+     edified_Eddy_return_expr->content.return_expr = edify_Eddy_modify_expr (buffered_program);
+     break;
+
+   default:
+ 
+     assert (0);
+     break;
+
+ }
+ token = scan (buffered_program);
+ if (LOOKAHEAD(buffered_program, Eddy_end)) {
+
+   INSERT_EDDY_NODE_BY_ITS_ID (EDDY_TABLE(buffered_program), edified_Eddy_return_expr);
+
+ }
+ else {
+
+   YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program);
+
+ }
+
+ return edified_Eddy_return_expr;
+
+}
+
+static Eddy *edify_Eddy_type_decl (Buffer *buffered_program) {
+
+ // Not needed now.
+
+}

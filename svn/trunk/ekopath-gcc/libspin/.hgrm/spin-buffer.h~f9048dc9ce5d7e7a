@@ -1,0 +1,145 @@
+#ifndef __BUFFER_H__
+#define __BUFFER_H__
+
+// $Id:$
+
+#include <string.h>
+// extern char *strndup(const char *s, size_t n); // Should not really be required
+
+#include "spin-eddy.h"
+
+typedef struct Buffer {
+
+  char *buffer; // Available buffer
+  char *column_1;
+  unsigned int original_length;
+  unsigned int available_length; // Available length
+  Eddy_Token current_token; // Keep it in here as "lookahead".
+  char *current_lexeme; // (NULL if no lexeme was found).
+  int indentation_depth; // Negative values to be captured for error reporting.
+  unsigned int line_number;
+  unsigned int error_count; // TODO
+
+  // Keep a table of pointers to Eddy nodes for quick reference.
+  // This table is dynamically allocated/reallocated as required.
+  // Only meant for resolving "Link's.
+  // This table is an "inherited" attribute of every Non terminal.
+  Eddy_List *eddy_table;
+
+} Buffer;
+
+static Buffer *create_Buffer(char *buffer, unsigned int original_length) {
+
+ Buffer *new_buffer;
+
+ new_buffer = (Buffer *) calloc (1, sizeof (Buffer));
+ assert (new_buffer);
+
+ new_buffer->buffer = strndup (buffer, (size_t) original_length);
+ new_buffer->column_1 = new_buffer->buffer;
+ new_buffer->original_length = original_length;
+ new_buffer->available_length = original_length; 
+ new_buffer->current_token = Eddy_EOF;
+ new_buffer->current_lexeme = NULL;
+ new_buffer->indentation_depth = 0;
+ new_buffer->line_number = 1;
+ new_buffer->eddy_table = NULL;
+
+ return new_buffer;
+
+}
+
+#define EDDY_TABLE(buf) buf->eddy_table
+#define CURRENT_COLUMN(buf) (buf->buffer) - (buf->column_1) + 1
+#define CONSUMED_LENGTH(buf) (buf->original_length - buf->available_length);
+
+#define CURRENT_TOKEN(buf) buf->current_token
+#define CURRENT_LEXEME(buf) buf->current_lexeme
+#define CURRENT_LEXEME_LENGTH(buf) buf->buffer - buf->current_lexeme
+
+#define LOOKAHEAD(buf, token) (buf -> current_token == token)
+#define LOAD_LEXEME(aux, buf)                                                  \
+        if (buf->current_token != Eddy_EOF) {                                  \
+         strncpy (aux, CURRENT_LEXEME(buf), CURRENT_LEXEME_LENGTH(buf));       \
+         aux [CURRENT_LEXEME_LENGTH(buf)] = '\0';                              \
+        }                                                                      \
+        else {                                                                 \
+         strcpy (aux, STRINGIFY (Eddy_EOF));                                   \
+        }
+
+#define CLEAN_STATE(buffered_program) buffered_program->error_count == 0
+
+#define PARSE_ERROR(buffered_program, msg, args ...)                           \
+        fprintf (stderr, "Error: " msg ". (Around line %d, column %d).\n",     \
+                         ## args,                                              \
+                         buffered_program->line_number,                        \
+                         CURRENT_COLUMN(buffered_program));                    \
+                         buffered_program->error_count++;
+
+#define ERROR_RECOVERY(buffered_program, token, synchronising_token)           \
+        do {                                                                   \
+                                                                               \
+          char aux[4096];                                                      \
+          LOAD_LEXEME(aux, buffered_program);                                  \
+          PARSE_ERROR(buffered_program,                                        \
+                      "Unexpected '%s'", aux);                                 \
+                                                                               \
+          token = scan (buffered_program);                                     \
+                                                                               \
+        } while (token != synchronising_token && token != Eddy_EOF);
+
+#define YELL_N_RECOVER_On_Eddy_left_square_bracket(buffered_program)           \
+   if (CURRENT_LEXEME(buffered_program)) {                                     \
+     PARSE_ERROR (buffered_program,                                            \
+                  "Expecting '[', got '%s'", CURRENT_LEXEME(buffered_program));\
+   }                                                                           \
+   ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+
+#define YELL_N_RECOVER_On_missing_string_literal(buffered_program)             \
+   PARSE_ERROR (buffered_program, "Expecting string literal");                 \
+   ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+
+#define YELL_N_RECOVER_On_missing_right_parenthesis(buffered_program)          \
+   PARSE_ERROR (buffered_program, "Was expecting ')' 2");                      \
+   ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+
+#define YELL_N_RECOVER_On_missing_Eddy_integer_cst(buffered_program)           \
+   PARSE_ERROR (buffered_program, "Was expecting Integer_cst");                \
+   ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+
+
+#define YELL_N_RECOVER_On_missing_Eddy_identifier_node(buffered_program)       \
+   PARSE_ERROR (buffered_program, "Expecting Identifier_node");                \
+   ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+
+#define YELL_N_RECOVER_On_missing_Eddy_statement_list(buffered_program)        \
+   PARSE_ERROR (buffered_program, "Expecting Statement_list");                 \
+   ERROR_RECOVERY (buffered_program, token, Eddy_EOF);
+   
+
+// Note, each time you are done with a run of the buffer, 
+// call reset_Buffer before you do anything with it again!
+static void reset_Buffer(Buffer *buf) {
+
+ buf->buffer -= CONSUMED_LENGTH(buf);
+ buf->column_1 = buf->buffer;
+ buf->available_length = buf->original_length;
+ buf->current_token = Eddy_EOF;
+ buf->current_lexeme = NULL;
+ buf->indentation_depth = 0;
+ buf->line_number = 1;
+ 
+ // buf->eddy_table = NULL; Keep the eddy_table intact.
+
+}
+
+static void destroy_Buffer(Buffer *buf) {
+
+ reset_Buffer (buf);
+ free (buf->buffer);
+ free_eddy_list (buf->eddy_table);
+ free (buf);
+
+}
+
+#endif

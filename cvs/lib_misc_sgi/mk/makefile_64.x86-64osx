@@ -1,0 +1,151 @@
+# -*- Makefile -*-
+#
+#  Copyright (C) 2006 Absoft, Corp.  All Rights Reserved.
+#
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of version 2 of the GNU General Public License as
+#  published by the Free Software Foundation.
+#
+#  This program is distributed in the hope that it would be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+#
+#  Further, this software is distributed without any warranty that it is
+#  free of the rightful claim of any third person regarding infringement 
+#  or the like.  Any license provided herein, whether implied or 
+#  otherwise, applies only to this software file.  Patent licenses, if 
+#  any, provided herein do not apply to combinations of this program with 
+#  other software, or any other product whatsoever.  
+#
+#  You should have received a copy of the GNU General Public License along
+#  with this program; if not, write the Free Software Foundation, Inc., 59
+#  Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#
+#  Contact information:  Absoft corp., 2781 Bond St,
+#  Rochester Hills, MI 48309, or:
+#
+#  http://www.absoft.com
+#
+#
+
+ifndef PRODUCTION
+PRODUCTION=0
+endif
+ifndef NOUPDATE
+NOUPDATE=0
+endif
+ifndef LEOPARD
+LEOPARD=1
+endif
+
+MAKEFILE = makefile_64.x86-64osx
+
+ifndef PIC
+MODEL = 
+else
+MODEL = -fpic
+endif
+
+ifeq ($(PRODUCTION), 0)
+OPTIMIZE = -g $(MODEL)
+LIB = libamisc_x.a
+BUILDDIR = debug64
+SHLIB = libamisc_x.dylib
+SHBUILDDIR = picdebug64
+else
+OPTIMIZE = -O $(MODEL)
+LIB = libamisc.a
+BUILDDIR = production64
+SHLIB = libamisc.dylib
+SHBUILDDIR = picproduction64
+endif
+
+rule1:  default
+
+SRC_DIR=$(FIXDIR)..
+IOINC_DIR=$(FIXDIR)../../libfio/globsrc
+
+VPATH=$(SRC_DIR):
+
+INCLUDES = -I$(SRC_DIR) -I$(IOINC_DIR)
+
+ifeq ($(PRODUCTION), 0)
+CC  = gcc -m64 
+else
+CC  = gcc -m64 
+endif
+
+DEFINES = -DBYTESWAPPED -D_LITTLE_ENDIAN -D_ALCHEMY \
+
+CFLAGS = $(OPTIMIZE) \
+	 $(DEFINES) \
+	 $(INCLUDES)  
+
+ifeq ($(LEOPARD), 0)
+ENVP=MACOSX_DEPLOYMENT_TARGET=10.4
+SDK=/Developer/SDKs/MacOSX10.4u.sdk
+else
+ENVP=MACOSX_DEPLOYMENT_TARGET=10.5
+SDK=/Developer/SDKs/MacOSX10.5.sdk
+endif
+
+CFLAGS += -isysroot ${SDK}
+CXXFLAGS += -isysroot ${SDK}
+LDFLAGS += -isysroot ${SDK} -Wl,-syslibroot,${SDK}
+        
+AR = ar
+
+SRC =	concat.c quad.c leadz.c
+INC =
+
+ALL_OBJ = concat.o quad.o leadz.o
+
+
+#########################################################################
+#									#
+#	the default rule, make sure making while logged to right	#
+#	system. If system is okay, recursively make compiler		#
+#									#
+#########################################################################
+
+default:$(BUILDDIR) $(SHBUILDDIR)
+ifeq ($(NOUPDATE), 0)
+	cd $(SRC_DIR); svn update
+endif
+	$(MAKE) -f ../$(MAKEFILE) -C $(BUILDDIR) FIXDIR=../ INCLUDEDEPEND=1 $(LIB)
+	$(MAKE) -f ../$(MAKEFILE) -C $(SHBUILDDIR) FIXDIR=../ INCLUDEDEPEND=1 PIC=1 $(SHLIB)
+
+$(BUILDDIR):
+	mkdir $(BUILDDIR)
+
+$(SHBUILDDIR):
+	mkdir $(SHBUILDDIR)
+
+clean:
+	-rm -f $(BUILDDIR)/*.o $(BUILDDIR)/*.a
+	-rm -f $(SHBUILDDIR)/*.o $(SHBUILDDIR)/*.dylib
+
+clobber:
+	-rm -rf $(BUILDDIR) $(SHBUILDDIR)
+
+
+$(LIB):	$(ALL_OBJ)
+	ar r $(LIB) $(ALL_OBJ)
+	cp $(LIB) $(ABSOFT)/lib64
+
+$(SHLIB):	$(ALL_OBJ)
+	${ENVP} g++ -m64 -dynamic -dynanmiclib -undefined dynamic_lookup -o $(SHLIB) $(ALL_OBJ)
+	cp $(SHLIB) $(ABSOFT)/shlib64
+
+.c.o:
+	${ENVP} $(CC) -c $(CFLAGS) -o $@ $<
+
+# Automatic dependencies
+%.d: %.c
+	gcc -M $(DEFINES) $(INCLUDES) $< \
+	    | sed 's/\($*\)\.o[ :]*/\1.o $@ : /g' > $@; \
+	    [ -s $@ ] || rm -f $@
+
+ifdef INCLUDEDEPEND
+include $(SRC:.c=.d)
+endif

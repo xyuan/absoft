@@ -1,0 +1,9 @@
+// $Id: spin-parser.h,v 1.1 2005/12/21 03:15:43 anmol Exp $
+
+#ifndef __PARSER__H__
+#define __PARSER__H__
+#include "spin-eddy.h"
+#include "spin-buffer.h"
+
+extern Eddy *edify (Buffer *buffered_program);
+#endif

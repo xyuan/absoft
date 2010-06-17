@@ -1,0 +1,9 @@
+if [ $# -lt 2 ]
+then
+  echo "Usage: $(basename $0) -TARG:abi=[n32|n64] foo.[B|N]"
+  exit 1
+fi
+
+LIBDIR="$(dirname $0)/../lib/2.1"
+export LD_LIBRARY_PATH=$LIBDIR
+exec -a whirl2c $LIBDIR/be $@

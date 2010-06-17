@@ -1,0 +1,164 @@
+###############################################################################
+#
+# macros
+#
+###############################################################################
+
+ifeq ($(ABSOFT),"")
+ABSOFT=~/absoft
+ABS_WARNING=1
+endif
+
+ifeq ($(PRODUCTION),1)
+OPT=
+VAR=
+SUFX=
+else
+OPT=BUILD_OPTIMIZE=DEBUG
+ifdef APPLE
+VAR=OPTIMIZER=-gdwarf-2
+else
+VAR=OPTIMIZER=-g
+endif
+SUFX=_x
+endif
+
+ifeq ($(CYGWIN),1)
+OPT+= CYGWIN=1 ABSOFT_FC=1 BUILD_TARGET=X64
+endif
+
+ifeq ($(BUILD_COMPILER),"ACC")
+COMPILER=BUILD_COMPILER=ACC
+endif
+
+ifeq ($(BUILD_COMPILER),"PSC)
+COMPILER=BUILD_COMPILER=PSC PSC_ROOT_PREFIX=$PATHSCALE PSC_NAME_PREFIX=path
+endif
+
+
+
+###############################################################################
+#
+# build rules
+#
+###############################################################################
+
+.PHONY: setup build_cc build_cpp build_inline build_driver
+
+default: setup build_cc build_cpp build_inline build_driver
+
+
+
+setup:
+	@echo "##########***** making be *****##########"
+ifeq ($(PRODUCTION),1)
+	@echo "PRODUCTION=RELEASE"
+else
+	@echo "PRODUCTION=DEBUG"
+endif
+ifeq ($(ABS_WARNING),1)
+	@echo "### WARNING: ABSOFT set to ~/absoft for Makefile.acc"
+endif
+	mkdir -p $(ABSOFT)/bin;
+
+
+
+build_cc:
+	#ifeq ($(BUILD_COMPILER),"ACC")
+	#	export LD_LIBRARY_PATH=$(ABSOFT)/shlib:$(ABSOFT)/shlib64; \
+	#endif
+	#ifeq ($(BUILD_COMPILER),"PSC")
+	#	export LD_LIBRARY_PATH=$(PATHSCALE)/lib/2.2.1:$(PATHSCALE)/lib/2.2.1/32; \
+	#endif
+	@echo "##########***** making gcc fe *****##########"
+	cd gccfe; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp -f gfec $(ABSOFT)/bin/gfec$(SUFX); \
+	cd ..
+
+
+build_cpp:
+	@echo "##########***** making g++ fe *****##########"
+	cd g++fe; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp -f gfecc $(ABSOFT)/bin/gfecc$(SUFX); \
+	cd ..
+
+build_inline:
+	@echo "##########***** making lw_inline *****##########"
+	cd lw_inline; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp -f lw_inline $(ABSOFT)/bin/inline$(SUFX); \
+	cd ..
+
+build_driver:
+	@echo "##########***** making c/c++ driver *****##########"
+	cd driver; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	rm -f $(ABSOFT)/bin/acc_x; \
+	cp -f driver $(ABSOFT)/bin/absoftcc$(SUFX); \
+	cp -f driver $(ABSOFT)/bin/absoft++$(SUFX); \
+	# NOTE: acc_x might be link to old acc from base makefile!; \
+	cd ..
+
+
+
+
+
+
+
+
+###############################################################################
+#
+# clobber
+#
+###############################################################################
+
+.PHONY: clobber_cc clobber_cpp clobber_inline clobber_driver
+
+clobber: clobber_cc clobber_cpp clobber_inline clobber_driver
+	cd include; $(MAKE) clobber;
+
+clobber_cc:
+	cd gccfe; $(MAKE) clobber;
+
+clobber_cpp:
+	cd g++fe; $(MAKE) clobber;
+
+clobber_inline:
+	cd lw_inline; $(MAKE) clobber;
+
+clobber_driver:
+	cd driver; $(MAKE) clobber;
+
+
+
+
+
+
+
+###############################################################################
+#
+# clean
+#
+###############################################################################
+
+.PHONY: clean_cc clean_cpp clean_inline clean_driver
+
+clean: clean_cc clean_cpp clean_inline clean_driver
+
+
+clean_cc:
+	cd gccfe; $(MAKE) clean;
+
+clean_cpp:
+	cd g++fe; $(MAKE) clean;
+
+clean_inline:
+	cd lw_inline; $(MAKE) clean;
+
+clean_driver:
+	cd driver; $(MAKE) clean;
+
+
+

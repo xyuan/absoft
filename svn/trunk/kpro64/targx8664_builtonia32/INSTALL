@@ -1,0 +1,13 @@
+# Fail immediately if the installation directory was not specified.
+test -n "$1" || exit 1
+
+LIBDIR="$1/lib/2.1"
+
+mkdir --parents --verbose $LIBDIR || exit
+
+CP="cp --update --verbose"
+
+for FILE in libfortran/libfortran.a libu/libffio.a libmv/libmv.a
+do
+  $CP $FILE $LIBDIR || exit
+done

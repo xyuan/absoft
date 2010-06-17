@@ -1,0 +1,386 @@
+###############################################################################
+#
+# macros
+#
+###############################################################################
+
+ifeq ($(ABSOFT),"")
+ABSOFT=~/absoft
+ABS_WARNING=1
+endif
+
+ifeq ($(PRODUCTION),1)
+OPT=
+VAR=
+SUFX=
+else
+OPT=BUILD_OPTIMIZE=DEBUG
+ifdef APPLE
+VAR=OPTIMIZER=-gdwarf-2
+else
+VAR=OPTIMIZER=-g
+endif
+SUFX=_x
+endif
+
+ifeq ($(CYGWIN),1)
+OPT+= CYGWIN=1 ABSOFT_FC=1 BUILD_TARGET=X64
+endif
+
+ifeq ($(BUILD_COMPILER),"ACC")
+COMPILER=BUILD_COMPILER=ACC
+endif
+
+ifeq ($(BUILD_COMPILER),"PSC)
+COMPILER=BUILD_COMPILER=PSC PSC_ROOT_PREFIX=$PATHSCALE PSC_NAME_PREFIX=path
+endif
+
+###############################################################################
+#
+# build rules
+#
+###############################################################################
+
+.PHONY: setup build_be_driver build_ipl build_ipa build_ipa_link build_libinstr build_libmv build_includes postflight
+
+default: setup build_be_driver build_ipl build_ipa build_ipa_link build_libinstr build_libmv postflight
+
+
+
+setup:
+	@echo "##########***** making be *****##########"
+ifeq ($(PRODUCTION),1)
+	@echo "PRODUCTION=RELEASE"
+else
+	@echo "PRODUCTION=DEBUG"
+endif
+ifeq ($(ABS_WARNING),1)
+	@echo "### WARNING: ABSOFT set to ~/absoft for Makefile.ipa"
+endif
+	mkdir -p $(ABSOFT)/bin;
+	mkdir -p $(ABSOFT)/lib;
+	mkdir -p $(ABSOFT)/lib64;
+	mkdir -p $(ABSOFT)/shlib;
+
+
+
+build_be_driver:
+	#ifeq ($(BUILD_COMPILER),"ACC")
+	#	export LD_LIBRARY_PATH=$(ABSOFT)/shlib:$(ABSOFT)/shlib64; \
+	#endif
+	#ifeq ($(BUILD_COMPILER),"PSC")
+	#	export LD_LIBRARY_PATH=$(PATHSCALE)/lib/2.2.1:$(PATHSCALE)/lib/2.2.1/32; \
+	#endif
+	@echo "##########***** making be_driver/ipl *****##########"
+	cd be_driver; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp -f be $(ABSOFT)/bin/ipl$(SUFX); \
+	cd ..
+
+
+build_ipl:
+	@echo "##########***** making ipl.so *****##########"
+	cd ipl; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp -f ipl.so $(ABSOFT)/shlib/.; \
+	cd ..
+
+build_ipa:
+	@echo "##########***** making ipa.so *****##########"
+	cd ipa; \
+        ln -s ../targ_info/opteron.so opteron.so; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp -f ipa.so $(ABSOFT)/shlib/.; \
+	cd ..
+
+build_ipa_link:
+	@echo "##########***** making ipa_link *****##########"
+ifdef APPLE
+	if [ -e /usr/lib/libintl.a ]; then \
+	mkdir -p ../targcygnus_ia32_x8664/intl; \
+	ln -sf /usr/lib/libintl.a ../targcygnus_ia32_x8664/intl/libintl.a; \
+	elif [ -e /usr/local/lib/libintl.a ]; then \
+	mkdir -p ../targcygnus_ia32_x8664/intl; \
+	ln -sf /usr/local/lib/libintl.a ../targcygnus_ia32_x8664/intl/libintl.a; \
+	fi
+endif
+ifdef CYGWIN
+	if [ -e /usr/lib/libintl.a ]; then \
+	mkdir -p ../targcygnus_ia32_x8664/intl; \
+	ln -sf /usr/lib/libintl.a ../targcygnus_ia32_x8664/intl/libintl.a; \
+	fi
+	#cd ../targcygnus_ia32_x8664; \
+	#cp ../cygnus/ld/Makefile.in.cygwin$(SUFX) ld/Makefile.in; \
+	#cd ../targia32_x8664;
+endif
+ifdef APPLE
+	cd ../targcygnus_ia32_x8664; \
+	./CONFIGURE; $(MAKE); cp ../cygnus/ld/Makefile.apple ld/Makefile; $(MAKE); cd ld; \
+	cp -f ld-new $(ABSOFT)/bin/ipa_link$(SUFX); \
+	cd ../../targia32_x8664
+else
+ifdef CYGWIN
+	cd ../targcygnus_ia32_x8664; \
+	if [ ! -e /usr/include/sys/dir.h ]; then \
+	cp dir.h /usr/include/sys/dir.h; \
+	fi
+	cd ../targcygnus_ia32_x8664; \
+	./CONFIGURE; $(MAKE); echo "########## CONFIGURE & MAKE completed. ##########"; cp ../cygnus/ld/Makefile.cygwin$(SUFX) ld/Makefile; echo "########### copied Makefile.cygwin$(SUFX) to ld directory ###########"; \
+	$(MAKE); cd ld; \
+	cp -f ipa_link$(SUFX) $(ABSOFT)/bin/ipa_link$(SUFX); \
+	cd ../../targia32_x8664
+else
+	cd ../targcygnus_ia32_x8664; \
+	./CONFIGURE; $(MAKE); cd ld; \
+	cp -f ld-new $(ABSOFT)/bin/ipa_link$(SUFX); \
+	cd ../../targia32_x8664
+endif
+endif
+
+build_includes: 
+	@echo "##########***** making local includes *****##########"
+	cd ../targia32_builtonia32/include; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cd ../../targia32_x8664;
+ifndef 32BIT_ONLY
+	cd ../targx8664_builtonia32/include; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cd ../../targia32_x8664;
+endif
+
+build_libinstr: build_includes  
+ifndef CYGWIN
+
+	@echo "##########***** making libinstr.a 32-bit *****##########"
+	cd ../targia32_builtonia32/libinstr; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp -f libinstr.a $(ABSOFT)/lib/.; \
+	cp -f libinstr.so.1 $(ABSOFT)/shlib/.; \
+	ln -sf $(ABSOFT)/shlib/libinstr.so.1 $(ABSOFT)/shlib/libinstr.so; \
+	cd ../../targia32_x8664;
+ifndef 32BIT_ONLY
+	@echo "##########***** making libinstr.a 64-bit *****##########"
+	cd ../targx8664_builtonia32/libinstr; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp -f libinstr.a $(ABSOFT)/lib64/.; \
+	cp -f libinstr.so.1 $(ABSOFT)/shlib64/.; \
+	ln -sf $(ABSOFT)/shlib64/libinstr.so.1 $(ABSOFT)/shlib64/libinstr.so; \
+	cd ../../targia32_x8664
+endif
+
+else
+
+ifndef BUILD_LIBINSTR_TYPE
+	@echo "##########***** build x86 version of mv.lib using MSVC 2005 x86 compiler *****##########"
+ifeq ($(PRODUCTION),1)
+	cd ../../../pathscale-mk/; ./prod.x86-64windows.sh NOINSTALL MSVCENV=32 BUILD_LIBINSTR_TYPE=32  build_ipa BUILD=build_libinstr
+else
+	cd ../../../pathscale-mk/; ./debug.x86-64windows.sh NOINSTALL MSVCENV=32 BUILD_LIBINSTR_TYPE=32 build_ipa BUILD=build_libinstr
+endif # PRODUCTION
+endif # MSVCENV
+
+ifeq ($(BUILD_LIBINSTR_TYPE),32)
+	@echo "##########***** making libinstr.a 32-bit *****##########"
+	cd ../targia32_builtonia32/libinstr; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 BUILD_COMPILER=MSCL BUILD_TYPE=NONSHARED ; \
+	cp -f libinstr.lib $(ABSOFT)/lib/.; \
+#	cp -f libinstr.so.1 $(ABSOFT)/shlib/.; \
+#	ln -sf $(ABSOFT)/shlib/libinstr.so.1 $(ABSOFT)/shlib/libinstr.so; \
+	cd ../../targia32_x8664;
+endif
+
+ifndef 32BIT_ONLY
+
+ifndef BUILD_LIBINSTR_TYPE
+	# build using x64 env of MSVS2005
+	@echo "##########***** build x64 version of mv.lib using MSVC 2005 x64 compiler  *****##########"
+ifeq ($(PRODUCTION),1)
+	cd ../../../pathscale-mk/; ./prod.x86-64windows.sh NOINSTALL MSVCENV=64  BUILD_LIBINSTR_TYPE=64 build_ipa BUILD=build_libinstr
+else
+	cd ../../../pathscale-mk/; ./debug.x86-64windows.sh NOINSTALL MSVCENV=64 BUILD_LIBINSTR_TYPE=64 build_ipa BUILD=build_libinstr
+endif # PRODUCTION
+endif # MSVCENV
+
+ifeq ($(BUILD_LIBINSTR_TYPE),64)
+	@echo "##########***** making libinstr.a 64-bit *****##########"
+	cd ../targx8664_builtonia32/libinstr; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 BUILD_COMPILER=MSCL BUILD_TYPE=NONSHARED ; \
+	cp -f libinstr.lib $(ABSOFT)/lib64/.; \
+#	cp -f libinstr.so.1 $(ABSOFT)/shlib64/.; \
+#	ln -sf $(ABSOFT)/shlib64/libinstr.so.1 $(ABSOFT)/shlib64/libinstr.so; \
+	cd ../../targia32_x8664
+endif
+
+endif # 32BIT_ONLY
+endif
+
+
+build_libmv: # build_includes
+ifndef CYGWIN
+	@echo "##########***** making mv lib 32 bit *****##########"
+	cd ../targia32_builtonia32/libmv; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp -f libmv.a $(ABSOFT)/lib/.; \
+	cp -f libmv.so.1  $(ABSOFT)/shlib/.; \
+	ln -sf $(ABSOFT)/shlib/libmv.so.1 $(ABSOFT)/shlib/libmv.so; \
+	cd ../../targia32_x8664
+else
+	
+ifndef BUILD_LIBMV_TYPE
+	@echo "##########***** build x86 version of mv.lib using MSVC 2005 x86 compiler *****##########"
+ifeq ($(PRODUCTION),1)
+	cd ../../../pathscale-mk/; ./prod.x86-64windows.sh NOINSTALL MSVCENV=32 BUILD_LIBMV_TYPE=32  build_ipa BUILD=build_libmv
+else
+	cd ../../../pathscale-mk/; ./debug.x86-64windows.sh NOINSTALL MSVCENV=32 BUILD_LIBMV_TYPE=32 build_ipa BUILD=build_libmv
+endif # PRODUCTION
+endif # MSVCENV
+endif # 32bit build libmv
+	
+ifndef 32BIT_ONLY
+ifndef CYGWIN
+	@echo "##########***** making mv lib 64 bit NON-CYGWIN *****##########"
+	cd ../targx8664_builtonia32/libmv; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp -f libmv.a $(ABSOFT)/lib64/.; \
+	cp -f libmv.so.1  $(ABSOFT)/shlib64/.; \
+	ln -sf $(ABSOFT)/shlib64/libmv.so.1 $(ABSOFT)/shlib64/libmv.so; \
+	cd ../../targia32_x8664
+else
+ifndef BUILD_LIBMV_TYPE
+	# build using x64 env of MSVS2005
+	@echo "##########***** build x64 version of mv.lib using MSVC 2005 x64 compiler  *****##########"
+ifeq ($(PRODUCTION),1)
+	cd ../../../pathscale-mk/; ./prod.x86-64windows.sh NOINSTALL MSVCENV=64  BUILD_LIBMV_TYPE=64 build_ipa BUILD=build_libmv
+else
+	cd ../../../pathscale-mk/; ./debug.x86-64windows.sh NOINSTALL MSVCENV=64 BUILD_LIBMV_TYPE=64 build_ipa BUILD=build_libmv
+endif # PRODUCTION
+endif # MSVCENV
+endif # CYGWIN
+endif # 64bit build libmv
+
+ifeq ($(BUILD_LIBMV_TYPE),32)
+	@echo "MSVCENV set for x86"
+	@echo "##########***** making mv lib 32 bit CYGWIN=1 begins*****##########"
+	cd ../targia32_builtonia32/libmv; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 BUILD_COMPILER=MSCL BUILD_TYPE=NONSHARED ; \
+	cp -f libmv.lib $(ABSOFT)/lib/.; \
+#	cp -f libmv.so.1  $(ABSOFT)/shlib/.; \
+#	ln -sf $(ABSOFT)/shlib64/libmv.so.1 $(ABSOFT)/shlib/libmv.so; \
+	cd ../../targia32_x8664
+	@echo "##########***** making mv lib 32 bit CYGWIN=1 ended*****##########"
+endif
+ifeq ($(BUILD_LIBMV_TYPE),64)
+	@echo "MSVCENV set for x64"
+	@echo "##########***** making mv lib 64 bit CYGWIN=1 begins*****##########"
+	cd ../targx8664_builtonia32/libmv; \
+	$(MAKE) V=1 $(OPT) $(VAR) ABSOFT_EXTENSIONS=1 $(COMPILER) BUILD_TYPE=NONSHARED ; \
+	cp -f libmv.lib $(ABSOFT)/lib64/.; \
+#	cp -f libmv.so.1  $(ABSOFT)/shlib64/.; \
+#	ln -sf $(ABSOFT)/shlib64/libmv.so.1 $(ABSOFT)/shlib64/libmv.so; \
+	cd ../../targia32_x8664
+	@echo "##########***** making mv lib 64 bit CYGWIN=1 ends*****##########"
+endif
+
+
+
+x64only:
+ifdef CYGWIN
+	@echo "##########***** x64 only absoft cc prep *****##########"
+ifeq ($(X87BACKEND),1)
+	-./dllcreate32.sh;
+else
+	-./dllcreate.sh;
+endif
+	-./INSTALL.cygwin $(ABSOFT)
+endif
+
+
+postflight: # x64only
+
+
+###############################################################################
+#
+# clobber
+#
+###############################################################################
+
+.PHONY: clobber_be_driver clobber_ipl clobber_ipa clobber_ipa_link clobber_libinstr clobber_libmv clobber_includes
+
+clobber: clobber_be_driver clobber_ipl clobber_ipa clobber_ipa_link clobber_libinstr clobber_libmv
+	cd include; $(MAKE) clobber;
+
+
+clobber_be_driver:
+	cd be_driver; $(MAKE) clobber;
+
+clobber_ipl:
+	cd ipl; $(MAKE) clobber;
+
+clobber_ipa:
+	cd ipa; $(MAKE) clobber;
+
+clobber_ipa_link:
+	cd ../targcygnus_ia32_x8664; ./CLOBBER;
+
+clobber_includes:
+	cd ../targia32_builtonia32/include; $(MAKE) clobber;
+ifndef 32BIT_ONLY
+	cd ../targx8664_builtonia32/include; $(MAKE) clobber;
+endif
+
+clobber_libinstr: clobber_includes
+	cd ../targia32_builtonia32/libinstr; $(MAKE) clobber;
+ifndef 32BIT_ONLY
+	cd ../targx8664_builtonia32/libinstr; $(MAKE) clobber;
+endif
+
+clobber_libmv: clobber_includes
+	cd ../targia32_builtonia32/libmv; $(MAKE) clobber;
+ifndef 32BIT_ONLY
+	cd ../targx8664_builtonia32/libmv; $(MAKE) clobber;
+endif
+
+
+
+
+
+
+
+###############################################################################
+#
+# clean
+#
+###############################################################################
+
+.PHONY: clean_be_driver clean_ipl clean_ipa clean_ipa_link clean_libinstr clean_libmv
+
+clean: clean_be_driver clean_ipl clean_ipa clean_ipa_link clean_libinstr clean_libmv
+
+
+clean_be_driver:
+	cd be_driver; $(MAKE) clean;
+
+clean_ipl:
+	cd ipl; $(MAKE) clean;
+
+clean_ipa:
+	cd ipa; $(MAKE) clean;
+
+clean_ipa_link: clobber_ipa_link
+
+clean_libinstr:
+	cd ../targia32_builtonia32/libinstr; $(MAKE) clean;
+ifndef 32BIT_ONLY
+	cd ../targx8664_builtonia32/libmv; $(MAKE) clean;
+endif
+
+
+clean_libmv:
+	cd ../targia32_builtonia32/libmv; $(MAKE) clean;
+ifndef 32BIT_ONLY
+	cd ../targx8664_builtonia32/libmv; $(MAKE) clean;
+endif
+
+
+
+

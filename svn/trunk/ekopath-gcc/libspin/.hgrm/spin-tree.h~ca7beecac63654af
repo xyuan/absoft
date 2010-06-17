@@ -1,0 +1,1228 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright 2006 PathScale, Inc. All Rights Reserved.
+//
+// This program is free software; you can redistribute it and/or modify it
+// under the terms of version 2 of the GNU General Public License as
+// published by the Free Software Foundation.
+//
+// This program is distributed in the hope that it would be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+//
+// Further, this software is distributed without any warranty that it is
+// free of the rightful claim of any third person regarding infringement 
+// or the like.  Any license provided herein, whether implied or 
+// otherwise, applies only to this software file.  Patent licenses, if 
+// any, provided herein do not apply to combinations of this program with 
+// other software, or any other product whatsoever.  
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write the Free Software Foundation, Inc., 59
+// Temple Place - Suite 330, Boston MA 02111-1307, USA.
+////////////////////////////////////////////////////////////////////////////////
+
+#ifndef __SPIN_TREE_H__
+#define __SPIN_TREE_H__
+
+#include <stdio.h>
+#include <string.h>
+
+#include "spin-alloc.h"
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Error reporting:
+//
+////////////////////////////////////////////////////////////////////////////////
+
+// Use this only in switch-case statements which operate on specific node types.
+// Certain functions are meant to operate over all node types. (spin_child_count,
+// spin_kind_name). Do not use spin_error_report_unhandled() in those functions.
+// Let any missing cases in an enumeration be detected at compile time itself.
+#define spin_error_report_unhandled()                                          \
+  fprintf (stderr,                                                             \
+    "libspin error: Unhandled scenario in %s:%s() @ %d.\n",                    \
+    __FILE__, __FUNCTION__, __LINE__);
+
+#define spin_error_report_null_node()                                          \
+  fprintf (stderr, "libspin error: Got (spin_t) NULL node in %s:%s() @ %d\n",  \
+    __FILE__, __FUNCTION__, __LINE__);
+
+#define spin_error_report_is_childless()                                       \
+  fprintf (stderr, "libspin error: Node is childless.\n");
+
+#ifdef Is_True_On
+#define spin_error_report_bad_magic_number()                                   \
+  fprintf (stderr, "libspin error: Bad magic number.\n");
+#endif
+
+#define spin_error_report_am_support_unavailable_yet()                       \
+  fprintf (stderr, "libspin error: No support for the AM yet; exiting ....\n");
+
+#define spin_error_report_incompatible_kind(kind)                              \
+  fprintf (stderr, "In file %s, %s received incompatible node kind: %s (line: %d)\n",      \
+                   __FILE__,                                                   \
+                   __FUNCTION__,                                               \
+                   spin_kind_name (kind),                                      \
+                   __LINE__);
+
+#define spin_error_report_resizing_unsaturated_list(list)                      \
+  fprintf (stderr, "Resizing unsaturated list: %p\n", list);
+
+#define spin_error_report_internal_error_hit_eol()                             \
+  fprintf (stderr, "Internal error, got spin_eol.\n");
+
+#define spin_error_report_overwrite()                                          \
+  fprintf (stderr, "Overwriting child in file: %s, function: %s (line: %d)\n", \
+                    __FILE__,                                                  \
+                    __FUNCTION__,                                              \
+                    __LINE__);
+
+#define spin_error_report_out_of_bounds_access()                               \
+  fprintf (stderr, "Out of bounds access in function: %s (line: %d)\n",        \
+                    __FUNCTION__,                                              \
+                    __LINE__);
+
+#define spin_error_report_libspin_uninitialized()                              \
+  fprintf (stderr, "libspin uninitialized.\n");                 
+   
+////////////////////////////////////////////////////////////////////////////////
+//
+// Types:
+//
+////////////////////////////////////////////////////////////////////////////////
+
+typedef enum spin_register 
+{
+
+  // All enumeration values in here are for dedicated registers in the AM.
+  // Temporary registers are infinite in number and go backwards from the 
+  // special register VT. VT is not exposed. Temporary 'n' in the dumps is
+  // VT - (n + 1). (So temporary 0 is -32).
+
+  VT = -31,
+
+  AP = -3,
+  CP = -2, 
+  FP = -1,
+
+} spin_register_t;
+
+typedef enum spin_kind
+{
+
+  AM_BOTTOM_TYPE    = -2048, // No such type/type-operator.
+  
+  AM_CHAR           = -1031,
+  AM_POINTER        = -1030,
+  AM_VOID           = -1029,  
+  AM_UNSIGNED       = -1028,
+  AM_ARROW          = -1027,
+  AM_CROSS          = -1026,
+  AM_INTEGER        = -1025,
+
+  AM_TOP_TYPE       = -1024, // No such type/type-operator.
+
+  // Basic types and operators go -1024 backwards through -2048.
+  // All enumeration values above this line are for types and type operators in 
+  // the AM ISA.
+
+  AM_BOTTOM_INSTRUCTION    = -1023, // No such instruction.
+
+  AM_GT                    =  -268,
+  AM_LT                    =  -267,
+  AM_RETURN                =  -266,
+  AM_LABEL                 =  -265,
+  AM_JMP                   =  -264,
+  AM_EQ                    =  -263,
+  AM_CALL                  =  -262, 
+  AM_NEG                   =  -261,
+  AM_SUB                   =  -260,
+  AM_ADD                   =  -259,
+  AM_STORE                 =  -258,
+  AM_LOAD                  =  -257,
+
+  AM_TOP_INSTRUCTION       =  -256, // No such instruction.
+
+  // Instructions go from -256 backwards through -1023, 
+  // All enumeration values above this line are for instructions in the AM ISA.
+
+  // All enumeration values beneath this line are for sections in the AM code files.
+
+  AM_TOP_SECTION      = -255, // No such section.
+
+  AM_BODY_SECTION     =  -12,
+  AM_FRAME_SECTION    =  -11,
+  AM_FUNCTION_SECTION =  -10,
+  AM_TEXT_SECTION     =   -9,
+  AM_DATA_SECTION     =   -8,
+  AM_STRING_SECTION   =   -7,
+  AM_LITERAL_SECTION  =   -6,
+  AM_INTEGER_SECTION  =   -5,
+  AM_ID_SECTION       =   -4,
+  AM_TYPE_SECTION     =   -3,
+  AM_CODE_FILE        =   -2,
+
+  AM_BOTTOM_SECTION   =   -1, // No such section.
+
+  // Sections go backwards from -1 to -255
+
+  // All the enumeration values above this line are for the abstract machine.
+
+  // All the enumeration values below this line are for the semantic tree.
+
+  SPIN_BOTTOM = 0, // No such node.
+                                                                                                                                                           
+  SPIN_PROGRAM,
+  SPIN_FUNCTION,
+  SPIN_WHILE,
+  SPIN_BLOCK,
+
+  SPIN_LIST,
+  SPIN_EOL,
+
+  SPIN_UNSIGNED_QUALIFIER,
+
+  SPIN_INTEGER_CONSTANT,
+  SPIN_INTEGER_TYPE,
+
+  SPIN_ID,
+
+  SPIN_RETURN,
+  SPIN_VAR_DECL,
+
+  SPIN_LESS,
+  SPIN_PLUS,
+  SPIN_ASSIGN,
+
+  SPIN_DO,
+  SPIN_FOR,
+  SPIN_SWITCH,
+
+  SPIN_CLEANUP,
+  SPIN_TRY_BLOCK,
+  SPIN_SCOPE,
+
+  SPIN_TOP         // No such node.
+                                                                                                                                                           
+} spin_kind_t;
+                                                                                                                                                           
+// See documentation in spin-interface.h::spin_close() 
+typedef enum spin_status
+{
+
+  // Initialization:
+
+  SPIN_INIT_SUCCESS,
+  SPIN_INIT_FAILURE,
+
+  // Exit:
+
+  SPIN_EXIT_SUCCESS,          
+  SPIN_EXIT_LIBSPIN_UNINITIALIZED,
+  SPIN_EXIT_BAD_NODE_KIND,
+
+#ifdef Is_True_On
+  SPIN_EXIT_BAD_MAGIC_NUMBER,
+#endif
+
+} spin_status_t;
+                                                                                                                                                           
+typedef enum spin_bool_t_ {
+  spin_false, 
+  spin_true 
+} spin_bool_t;
+
+typedef void spin_void_t;
+typedef int spin_int_t;
+
+typedef char spin_char_t;
+typedef spin_char_t *spin_string_t;
+
+typedef unsigned int spin_count_t;
+typedef int spin_index_t; // We would need -1 to indicate "not found" in searches.
+typedef unsigned int spin_offset_t; // Do not see any reason we need negative offsets.
+
+typedef struct spin *spin_t;
+typedef spin_t *spin_vec_t;
+
+typedef int spin_magic_number_t;
+#define SPIN_MAGIC_NUMBER 0xdeadbeef
+
+struct spin 
+{
+  // For debugging only+
+  spin_magic_number_t magic_number;
+  spin_count_t        sid;
+  spin_bool_t         emitted;
+  // For debugging only-
+
+  spin_kind_t         kind;
+  union {
+    spin_void_t          *v;
+    spin_int_t            n; // For instruction fields. Cast appropriately.
+  } child_vec[0]; // GNUism alert!
+};
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Accessors:
+//
+////////////////////////////////////////////////////////////////////////////////
+
+// Abstraction over spin_t:
+#define SID(node)            node->sid
+#define EMITTED(node)        node->emitted
+#define MAGIC_NUMBER(node)   node->magic_number
+#define KIND(node)           node->kind
+#define CHILD_VECTOR(node)   node->child_vec
+#define CHILD(node, index)   node->child_vec[index]
+#define CHILD_V(node, index) CHILD(node, index).v
+#define CHILD_I(node, index) CHILD(node, index).n
+
+
+// Abstract Machine:
+
+#define AM_TYPE_SECTION(code_file)         CHILD_V (code_file, 0)
+#define AM_ID_SECTION(code_file)           CHILD_V (code_file, 1)
+#define AM_INTEGER_SECTION(code_file)      CHILD_V (code_file, 2)
+#define AM_LITERAL_SECTION(code_file)      CHILD_V (code_file, 3)
+#define AM_STRING_SECTION(code_file)       CHILD_V (code_file, 4)
+#define AM_DATA_SECTION(code_file)         CHILD_V (code_file, 5)
+#define AM_TEXT_SECTION(code_file)         CHILD_V (code_file, 6)
+
+#define AM_TYPE_LIST(section)              CHILD_V (section, 0)
+#define AM_ID_LIST(section)                CHILD_V (section, 0)
+#define AM_INTEGER_LIST(section)           CHILD_V (section, 0)
+#define AM_LITERAL_LIST(section)           CHILD_V (section, 0)
+#define AM_STRING_LIST(section)            CHILD_V (section, 0)
+#define AM_DATA_LIST(section)              CHILD_V (section, 0)
+#define AM_TEXT_LIST(section)              CHILD_V (section, 0)
+
+// Semantic tree:
+
+#define SPIN_PROGRAM_DECL_LIST(node)       CHILD_V (node, 0)
+
+#define SPIN_ID_STRING_LITERAL(node)       CHILD_V (node, 0)
+
+#define SPIN_FUNCTION_NAME(node)           CHILD_V (node, 0)
+#define SPIN_FUNCTION_RETURN_TYPE(node)    CHILD_V (node, 1)
+#define SPIN_FUNCTION_ARGUMENT_LIST(node)  CHILD_V (node, 2)
+#define SPIN_FUNCTION_BODY(node)           CHILD_V (node, 3)
+
+#define SPIN_VAR_DECL_TYPE(node)           CHILD_V (node, 0)
+#define SPIN_VAR_DECL_NAME(node)           CHILD_V (node, 1)
+
+#define SPIN_BLOCK_DECL_LIST(node)         CHILD_V (node, 0)
+#define SPIN_BLOCK_STMT_LIST(node)         CHILD_V (node, 1)
+
+#define SPIN_OPERATOR_TYPE(node)           CHILD_V (node, 0)
+#define SPIN_lOPERAND(node)                CHILD_V (node, 1)
+#define SPIN_rOPERAND(node)                CHILD_V (node, 2)
+
+#define SPIN_RETURN_VALUE(node)            CHILD_V (node, 0)
+
+#define SPIN_DECLARATION(node, index)      CHILD_V (spin_declaration_list (node), index)
+#define SPIN_ARGUMENT(node, index)         CHILD_V (spin_argument_list (node), index)
+#define SPIN_STATEMENT(block, index)       CHILD_V (spin_statement_list (block), index)
+
+#define SPIN_UNSIGNED_QUALIFIED_TYPE(node) CHILD_V (node, 0)
+
+#define SPIN_WHILE_CONDITION(node)         CHILD_V (node, 0)
+#define SPIN_WHILE_BODY(node)              CHILD_V (node, 1)
+
+#define SPIN_INTEGER_CONSTANT_VALUE(node)  CHILD_I (node, 0)
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Global declarations:
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_bool_t spin_initialized;
+extern spin_t spin_eol;
+extern spin_t spin_integer_type; // Node for the int type.
+extern spin_count_t spin_sid_count;
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Debug stuff:
+//
+////////////////////////////////////////////////////////////////////////////////
+
+
+// Basic sanity stuff:
+
+#ifdef Is_True_On
+static inline spin_magic_number_t spin_magic_number (spin_t node)
+{
+  if (node) return MAGIC_NUMBER (node);
+}
+#endif
+
+#ifdef Is_True_On
+static inline spin_bool_t spin_is_good_magic_number (spin_t node)
+{
+  if (spin_magic_number (node) != SPIN_MAGIC_NUMBER) {
+    return spin_false;
+  }
+  else
+    return spin_true;
+}
+#endif
+
+#ifdef Is_True_On
+static inline spin_bool_t spin_is_null_node (spin_t node) 
+{
+  if (node == (spin_t) NULL) {
+    return spin_true;
+  }
+  else
+    return spin_false;
+}
+#endif
+
+#ifdef Is_True_On
+static inline spin_bool_t spin_check (spin_t node)
+{
+  spin_bool_t check = spin_true;
+  if (spin_is_null_node (node)) {
+    spin_error_report_null_node ();
+    check = spin_false;
+  }
+  else {
+    if (spin_is_good_magic_number (node)) {
+      check = spin_true;
+    }
+    else {
+      spin_error_report_bad_magic_number ();
+      check = spin_false;
+    }
+  }
+  return check;
+}
+#endif
+
+#ifdef Is_True_On
+static inline spin_count_t spin_sid (spin_t node)
+{
+  return SID (node);
+}
+#endif
+
+#ifdef Is_True_On
+static inline spin_bool_t spin_emitted (spin_t node)
+{
+  return EMITTED (node);
+}
+#endif
+
+// Write:
+
+#ifdef Is_True_On
+static inline void _spin_magic_number (spin_t node, spin_magic_number_t magic_number)
+{
+  if (node)
+    MAGIC_NUMBER (node) = magic_number;
+  return;
+}
+#endif
+
+#ifdef Is_True_On
+static inline void _spin_sid (spin_t node, spin_count_t sid)
+{
+  if (node)
+    SID (node) = sid;
+  return; 
+}
+#endif
+
+#ifdef Is_True_On
+static inline void _spin_emitted (spin_t node, spin_bool_t emitted)
+{
+  if (node)
+    EMITTED (node) = emitted;
+  return;
+}
+#endif
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Function declarations:
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern const spin_string_t spin_kind_name (spin_kind_t kind);
+
+static inline spin_bool_t spin_is_initialized (void)
+{
+  return spin_initialized;
+}
+
+static inline spin_kind_t spin_kind (spin_t node)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return SPIN_BOTTOM;
+  }
+  spin_check (node);
+#endif
+  return KIND (node);
+}
+
+static inline spin_bool_t spin_is_childless (spin_kind_t kind) 
+{
+  if (kind == SPIN_INTEGER_TYPE ||
+      kind == SPIN_EOL          ||
+      kind == SPIN_ID           ||
+      kind == SPIN_ID) {
+    return spin_true;
+  }
+  return spin_false;
+}
+
+static inline spin_bool_t spin_is_type (spin_t node)
+{
+#ifdef Is_True_On
+  spin_check (node);
+#endif
+  if (spin_kind (node) == SPIN_INTEGER_TYPE)
+    return spin_true;
+  else if (spin_kind (node) == SPIN_UNSIGNED_QUALIFIER)
+    return spin_is_type ((spin_t) SPIN_UNSIGNED_QUALIFIED_TYPE (node));
+  else
+    return spin_false;
+}
+
+static inline spin_bool_t spin_has_universal_node (spin_kind_t kind)
+{
+  return (spin_bool_t) ((kind == SPIN_INTEGER_TYPE) || (kind == SPIN_EOL));
+}
+
+static spin_bool_t inline spin_is_operator_kind (spin_kind_t kind)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+  }
+#endif
+  if (kind == SPIN_ASSIGN ||
+      kind == SPIN_PLUS   ||
+      kind == SPIN_LESS)
+    return spin_true;
+  else
+    return spin_false;
+}
+
+static inline spin_bool_t spin_is_expression_kind (spin_kind_t kind)
+{
+  return (spin_bool_t) (spin_is_operator_kind (kind) || 
+                        kind == SPIN_VAR_DECL        ||
+                        kind == SPIN_INTEGER_CONSTANT); // Cannot have SPIN_ID.
+}
+
+// Lookup the corresponding universal node:
+// Note: If it has not been created yet, we will return the (spin_t) NULL
+// value.
+static inline spin_t spin_universal_node (spin_kind_t kind)
+{
+  spin_t node = (spin_t) NULL;
+#ifdef Is_True_On
+  if (!spin_has_universal_node (kind))
+    spin_error_report_incompatible_kind (kind);
+#endif
+  if (kind == SPIN_EOL)
+    node = spin_eol;
+  if (kind == SPIN_INTEGER_TYPE)
+    node = spin_integer_type;
+  return node;
+}
+
+static inline spin_t spin_declaration_list (spin_t node)
+{
+#ifdef Is_True_On
+  spin_check (node);
+  if (spin_kind (node) != SPIN_PROGRAM &&
+      spin_kind (node) != SPIN_BLOCK)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif // Is_True_On
+  switch (spin_kind (node)) {
+    case SPIN_PROGRAM: 
+      return (spin_t) SPIN_PROGRAM_DECL_LIST (node);
+    case SPIN_BLOCK:
+      return (spin_t) SPIN_BLOCK_DECL_LIST (node);
+    default:
+#ifdef Is_True_On
+      spin_error_report_unhandled ();
+#endif
+      // Since the kind of node was already validated, the default
+      // action is NOP.
+      break;
+  }
+  return (spin_t) NULL;
+}
+
+static inline spin_t spin_argument_list (spin_t function)
+{
+#ifdef Is_True_On
+  spin_check (function);
+  if (spin_kind (function) != SPIN_FUNCTION)
+    spin_error_report_incompatible_kind (spin_kind (function));
+#endif
+  return (spin_t) SPIN_FUNCTION_ARGUMENT_LIST (function);
+}
+
+static inline spin_t spin_statement_list (spin_t block)
+{
+#ifdef Is_True_On
+  spin_check (block);
+  if (spin_kind (block) != SPIN_BLOCK)
+    spin_error_report_incompatible_kind (spin_kind (block));
+#endif
+  return (spin_t) SPIN_BLOCK_STMT_LIST (block);
+}
+
+static inline spin_count_t spin_child_count (spin_kind_t kind) 
+{
+  switch (kind)
+  {
+    // Counts for the number of children for different constructs:
+
+    case AM_TOP_SECTION:
+    case AM_BOTTOM_SECTION:
+    case AM_TOP_INSTRUCTION:
+    case AM_BOTTOM_INSTRUCTION:
+
+    case AM_RETURN:
+
+    case AM_BOTTOM_TYPE:
+    case AM_CHAR:
+    case AM_VOID:
+    case AM_INTEGER:
+    case AM_TOP_TYPE:
+
+    case SPIN_BOTTOM:      
+    case SPIN_TOP:         
+    case SPIN_INTEGER_TYPE:
+    case SPIN_INTEGER_CONSTANT:
+    case SPIN_EOL:
+
+      return 0;
+
+    case AM_UNSIGNED:
+    case AM_POINTER:
+
+    // For a SPIN_LIST, initially let there be 1 element (i.e. only for the 
+    // SPIN_EOL) and then, successive inserts will automatically increase the 
+    // length of the list:
+
+    case AM_LABEL:
+
+    case AM_CROSS:
+    case AM_ARROW:
+
+    case SPIN_LIST: 
+
+    case SPIN_PROGRAM:      
+    case SPIN_ID:          
+    case SPIN_RETURN:
+    case SPIN_UNSIGNED_QUALIFIER:
+
+    case AM_FUNCTION_SECTION:
+    case AM_FRAME_SECTION:
+    case AM_BODY_SECTION:
+    case AM_TYPE_SECTION:
+    case AM_ID_SECTION:
+    case AM_INTEGER_SECTION:
+    case AM_STRING_SECTION:
+    case AM_LITERAL_SECTION:
+    case AM_DATA_SECTION:
+    case AM_TEXT_SECTION:
+      return 1;
+
+    case AM_JMP:
+
+    case SPIN_VAR_DECL:
+    case SPIN_BLOCK:
+    case SPIN_WHILE:
+      return 2;
+
+    case AM_LOAD:
+    case AM_STORE:
+    case AM_ADD:
+    case AM_SUB:
+    case AM_NEG:
+    case AM_CALL:
+    case AM_EQ:
+    case AM_LT:
+    case AM_GT:
+
+    case SPIN_LESS:
+    case SPIN_PLUS:        
+    case SPIN_ASSIGN:      
+      return 3;
+
+    case SPIN_FUNCTION:    
+      return 4;
+
+    case AM_CODE_FILE:
+      return 6;
+  }
+}
+
+static inline spin_vec_t spin_child_vec (spin_t node);
+
+
+// Write:
+static inline void _spin_kind (spin_t node, spin_kind_t kind) 
+{
+#ifdef Is_True_On
+  spin_check (node);
+#endif
+  KIND (node) = kind;
+  return;
+}
+
+static inline void _spin_string_literal (spin_t node, const spin_string_t s)
+{
+#ifdef Is_True_On
+  spin_check (node);
+  if (spin_kind (node) != SPIN_ID)
+    spin_error_report_incompatible_kind (spin_kind (node));
+  if (SPIN_ID_STRING_LITERAL (node) != NULL)
+    spin_error_report_overwrite ();
+#endif
+  SPIN_ID_STRING_LITERAL (node) = (spin_string_t) spin_alloc (strlen (s) + 1, 
+                                                              sizeof (spin_char_t));
+  if (SPIN_ID_STRING_LITERAL (node) == NULL)
+    spin_error_report_alloc_failure ();
+  strcpy ((spin_string_t) (SPIN_ID_STRING_LITERAL (node)), s);
+  return;
+}
+
+static inline void _spin_declaration_list (spin_t node, spin_t decl_list) 
+{
+#ifdef Is_True_On
+  spin_check (node);
+  if (spin_kind (node) != SPIN_PROGRAM &&
+      spin_kind (node) != SPIN_BLOCK)
+    spin_error_report_incompatible_kind (spin_kind (node));
+  spin_check (decl_list);
+  if (spin_kind (decl_list) != SPIN_LIST)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif // Is_True_On
+  switch (spin_kind (node)) {
+    case SPIN_PROGRAM: 
+      SPIN_PROGRAM_DECL_LIST (node) = (spin_t) decl_list;
+      break;
+    case SPIN_BLOCK:
+      SPIN_BLOCK_DECL_LIST (node) = (spin_t) decl_list;
+      break;
+    default:
+#ifdef Is_True_On
+      spin_error_report_unhandled ();
+#endif
+      // Since the kind of node was already validated, the default
+      // action is NOP.
+      break;
+  }
+  return;
+}
+
+static inline void _spin_name (spin_t node, spin_t name)
+{
+#ifdef Is_True_On
+  spin_check (node);
+  spin_check (name);
+  if (spin_kind (node) != SPIN_FUNCTION &&
+      spin_kind (node) != SPIN_VAR_DECL)
+    spin_error_report_incompatible_kind (spin_kind (node));
+  if (spin_kind (name) != SPIN_ID)
+    spin_error_report_incompatible_kind (spin_kind (name));
+#endif
+  switch (spin_kind (node)) {
+    case SPIN_FUNCTION: 
+      SPIN_FUNCTION_NAME (node) = name;
+      break;
+    case SPIN_VAR_DECL:
+      SPIN_VAR_DECL_NAME (node) = name;
+      break;    
+    default:
+      // Since the kind of node was already validated, the default
+      // action is NOP.
+#ifdef Is_True_On
+      spin_error_report_unhandled ();
+#endif
+      break;
+  }
+  return;
+}
+
+static inline void _spin_type (spin_t node, spin_t type)
+{
+#ifdef Is_True_On
+  spin_check (node);
+  if (spin_kind (node) != SPIN_VAR_DECL && 
+      spin_kind (node) != SPIN_FUNCTION &&
+      spin_kind (node) != SPIN_UNSIGNED_QUALIFIER &&
+      spin_is_operator_kind (spin_kind (node)) == spin_false)
+    spin_error_report_incompatible_kind (spin_kind (node));
+  if (!spin_is_type (type))
+    spin_error_report_incompatible_kind (spin_kind (type));
+#endif
+  switch (spin_kind (node)) {
+    case SPIN_FUNCTION:
+#ifdef Is_True_On
+      if (SPIN_FUNCTION_RETURN_TYPE (node) != NULL)
+        spin_error_report_overwrite ();
+#endif
+      SPIN_FUNCTION_RETURN_TYPE (node) = type;
+      break;
+    case SPIN_VAR_DECL:
+#ifdef Is_True_On
+      if (SPIN_VAR_DECL_TYPE (node) != NULL)
+        spin_error_report_overwrite ();
+#endif
+      SPIN_VAR_DECL_TYPE (node) = type;
+      break;
+    case SPIN_ASSIGN:
+    case SPIN_PLUS:
+    case SPIN_LESS:
+      SPIN_OPERATOR_TYPE (node) = type;
+      break;
+    case SPIN_UNSIGNED_QUALIFIER:
+      SPIN_UNSIGNED_QUALIFIED_TYPE (node) = type;
+      break;
+    default:
+#ifdef Is_True_On
+      spin_error_report_unhandled ();
+#endif
+      // Since the kind of node was already validated, the default
+      // action is NOP.
+      break;
+  }
+  return;
+}
+
+static inline void _spin_argument_list (spin_t function, spin_t argument_list)
+{
+#ifdef Is_True_On
+  spin_check (function);
+  if (spin_kind (function) != SPIN_FUNCTION)
+    spin_error_report_incompatible_kind (spin_kind (function));
+  if (spin_kind (argument_list) != SPIN_LIST)
+    spin_error_report_incompatible_kind (spin_kind (argument_list));
+  if (SPIN_FUNCTION_ARGUMENT_LIST (function) != NULL)
+    spin_error_report_overwrite ();
+#endif
+  SPIN_FUNCTION_ARGUMENT_LIST (function) = argument_list;
+  return;
+}
+
+#ifdef Is_True_On                                                                
+#define _SPIN_OPERAND_DEBUG_SECTION(prefix)                                          \
+  spin_check (op);                                                                   \
+  spin_check (prefix ## operand);                                                    \
+  if (!spin_is_expression_kind (spin_kind (op)))                                     \
+    spin_error_report_incompatible_kind (spin_kind (op));                            \
+  if (!spin_is_expression_kind (spin_kind (prefix ## operand)))                      \
+    spin_error_report_incompatible_kind (spin_kind (prefix ## operand));
+#else 
+#define _SPIN_OPERAND_DEBUG_SECTION(prefix)
+#endif                                                                               
+#define _SPIN_OPERAND(prefix)                                                        \
+static inline void _spin_ ## prefix ## operand (spin_t op, spin_t prefix ## operand) \
+{                                                                                    \
+  _SPIN_OPERAND_DEBUG_SECTION(prefix);                                               \
+  SPIN_ ## prefix ## OPERAND (op) = prefix ## operand;                               \
+  return;                                                                            \
+}
+
+_SPIN_OPERAND (l)
+_SPIN_OPERAND (r)
+
+static void _spin_loperand (spin_t op, spin_t loperand);
+static void _spin_roperand (spin_t op, spin_t roperand);
+
+static inline void _spin_body (spin_t node, spin_t body)
+{
+#ifdef Is_True_On
+  spin_check (node);
+  spin_check (body);
+  if (spin_kind (node) != SPIN_FUNCTION &&
+      spin_kind (node) != SPIN_WHILE)
+    spin_error_report_incompatible_kind (spin_kind (node));
+  if (spin_kind (body) != SPIN_BLOCK)
+    spin_error_report_incompatible_kind (spin_kind (body));
+#endif
+  switch (spin_kind (node)) {
+    case SPIN_FUNCTION:
+      SPIN_FUNCTION_BODY (node) = body;
+      break;
+    case SPIN_WHILE:
+      SPIN_WHILE_BODY (node) = body;
+      break;
+    default:
+      // Since the kind of node was already validated, the default
+      // action is NOP.
+#ifdef Is_True_On
+      spin_error_report_unhandled ();
+#endif
+      break;
+  }
+  return;
+}
+
+static inline void _spin_statement_list (spin_t block, spin_t block_statement_list)
+{
+#ifdef Is_True_On
+  spin_check (block);
+  spin_check (block_statement_list);
+  if (spin_kind (block) != SPIN_BLOCK)
+    spin_error_report_incompatible_kind (spin_kind (block));
+  if (spin_kind (block_statement_list) != SPIN_LIST)
+    spin_error_report_incompatible_kind (spin_kind (block_statement_list));
+#endif
+  SPIN_BLOCK_STMT_LIST (block) = block_statement_list;
+  return;
+}
+
+static inline void _spin_is_initialized (spin_bool_t initialized)
+{
+  spin_initialized = initialized;
+  return;
+}
+
+// Should always be a SPIN_DECL - generate __psc_rv if the need be.
+static inline void _spin_return_value (spin_t return_statement, spin_t name)
+{
+#ifdef Is_True_On
+  spin_check (return_statement);
+  spin_check (name); // name *can* be null. But jfkx let's hit it! :)
+  if (spin_kind (return_statement) != SPIN_RETURN)
+    spin_error_report_incompatible_kind (spin_kind (return_statement));
+  if (spin_kind (name) != SPIN_VAR_DECL)
+    spin_error_report_incompatible_kind (spin_kind (name));
+#endif
+  SPIN_RETURN_VALUE (return_statement) = name; 
+  return;
+}
+
+static inline void _spin_condition (spin_t node, spin_t condition)
+{
+#ifdef Is_True_On
+  spin_check (node);
+  if (spin_kind (node) != SPIN_WHILE)
+    spin_error_report_incompatible_kind (spin_kind (node));
+  if (spin_is_operator_kind (spin_kind (condition)) == spin_false)
+    spin_error_report_incompatible_kind (spin_kind (condition));
+#endif
+  SPIN_WHILE_CONDITION (node) = condition;
+  return;
+}
+
+static inline void _spin_integer_value (spin_t node, int value)
+{
+#ifdef Is_True_On
+  spin_check (node);
+  if (spin_kind (node) != SPIN_INTEGER_CONSTANT)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif
+  SPIN_INTEGER_CONSTANT_VALUE (node) = value;
+  return;
+}
+
+// Create:
+static spin_t __spin (spin_kind_t kind);
+// spin_create(): Create a spin node of the given kind and the child-slot for 
+// the appropriate number of children tacked past the header spin struct. The 
+// children are not created. For spin nodes such that the number of the children 
+// they might have is arbitrary, we use an initial size of 1 - increments will 
+// happen as and when necessary. 
+// Also, If we have a request for creating one of the "universal nodes", create 
+// the node only if we have not already created it.
+
+static inline spin_t __spin (spin_kind_t kind)
+{
+  spin_t node = (spin_t) NULL;
+  size_t slot_section_size = 0;
+
+  if (spin_has_universal_node (kind) && spin_universal_node (kind)) {
+    return spin_universal_node (kind);
+  }
+
+  if (spin_is_childless (kind))
+    slot_section_size = 0;
+  else if (kind == SPIN_ID)
+    slot_section_size = sizeof (spin_string_t);
+  else
+    slot_section_size = spin_child_count (kind) * sizeof (CHILD(node, 0));
+
+  node = (spin_t) spin_alloc (1, sizeof (node[0]) + slot_section_size);
+
+#ifdef Is_True_On
+  _spin_sid (node, spin_sid_count++); // This is the only place where we increment spin_sid_count.
+  _spin_emitted (node, spin_false);
+  _spin_magic_number (node, SPIN_MAGIC_NUMBER);
+#endif
+
+  _spin_kind (node, kind);
+
+  // For a SPIN_LIST, create an empty list to begin with.
+  // So all we need to do is to mark the end of the list here.
+  if (kind == SPIN_LIST)
+    CHILD_V (node, 0) = spin_eol;
+
+  return node;
+}
+
+static inline void __spin_integer_type (void)
+{
+#ifdef Is_True_On
+  if (spin_integer_type != (spin_t) NULL)
+    spin_error_report_overwrite ();
+#endif
+  spin_integer_type = __spin (SPIN_INTEGER_TYPE);
+  return;
+}
+
+// Destroy:
+
+static inline void ___spin (spin_t node);
+void ___spin (spin_t node) 
+{
+  return;
+}
+
+static inline void ___spin_integer_type (void)
+{
+  ___spin (spin_integer_type);
+  spin_integer_type = (spin_t) NULL;
+  return;
+}
+
+extern spin_t spin_open (FILE *am_file);
+
+extern spin_count_t spin_declaration_count (spin_t node);
+
+static inline spin_t spin_declaration (spin_t node, spin_count_t index)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return (spin_t) NULL;
+  }
+  spin_check (node);
+  if (spin_kind (node) != SPIN_PROGRAM && 
+      spin_kind (node) != SPIN_BLOCK)
+    spin_error_report_incompatible_kind (spin_kind (node));
+  if (index >= spin_declaration_count (node))
+    spin_error_report_out_of_bounds_access ();
+#endif
+  return (spin_t) SPIN_DECLARATION (node, index);
+}
+
+static inline spin_t spin_type (spin_t node)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return (spin_t) NULL;
+  }
+  spin_check (node);
+  if (spin_kind (node) != SPIN_VAR_DECL &&
+      spin_kind (node) != SPIN_FUNCTION &&
+      spin_kind (node) != SPIN_UNSIGNED_QUALIFIER &&
+      spin_is_operator_kind (spin_kind (node)) == spin_false)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif
+  switch (spin_kind (node)) {
+    case SPIN_FUNCTION:
+      return (spin_t) SPIN_FUNCTION_RETURN_TYPE (node);
+      break;
+    case SPIN_VAR_DECL:
+      return (spin_t) SPIN_VAR_DECL_TYPE (node);
+      break;
+    case SPIN_ASSIGN:
+    case SPIN_PLUS:
+    case SPIN_LESS:
+      return (spin_t) SPIN_OPERATOR_TYPE (node);
+      break;
+    case SPIN_UNSIGNED_QUALIFIER:
+      return (spin_t) SPIN_UNSIGNED_QUALIFIED_TYPE (node);
+      break;
+    default:
+#ifdef Is_True_On
+      spin_error_report_unhandled ();
+#endif
+      // Since the kind of node was already validated, the default
+      // action is NOP.
+      break;
+  }
+  return (spin_t) NULL;
+}
+
+static inline spin_t spin_name (spin_t node)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return (spin_t) NULL;
+  }
+  spin_check (node);
+  if (spin_kind (node) != SPIN_FUNCTION &&
+      spin_kind (node) != SPIN_VAR_DECL)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif
+  switch (spin_kind (node)) {
+    case SPIN_FUNCTION: 
+      return (spin_t) SPIN_FUNCTION_NAME (node);
+      break;
+    case SPIN_VAR_DECL:
+      return (spin_t) SPIN_VAR_DECL_NAME (node);
+      break;    
+    default:
+      // Since the kind of node was already validated, the default
+      // action is NOP.
+#ifdef Is_True_On
+      spin_error_report_unhandled ();
+#endif
+      break;
+  }
+  return (spin_t) NULL;
+}
+
+static inline const spin_string_t spin_string_literal (spin_t node)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return (spin_string_t) NULL;
+  }
+  spin_check (node);
+  if (spin_kind (node) != SPIN_ID)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif
+  return (const spin_string_t) SPIN_ID_STRING_LITERAL (node);
+}
+
+extern spin_count_t spin_argument_count (spin_t node);
+
+// TODO: The index is not validated! BAD!
+static inline spin_t spin_argument (spin_t node, spin_count_t index)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return (spin_t) NULL;
+  }
+  spin_check (node);
+  if (spin_kind (node) != SPIN_FUNCTION)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif
+  return (spin_t) SPIN_ARGUMENT (node, index);
+}
+
+static inline spin_t spin_body (spin_t node)
+{
+#ifdef Is_True_On
+  spin_check (node);
+  if (spin_kind (node) != SPIN_FUNCTION &&
+      spin_kind (node) != SPIN_WHILE)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif
+  switch (spin_kind (node)) {
+    case SPIN_FUNCTION:
+      return (spin_t) SPIN_FUNCTION_BODY (node);
+      break;
+    case SPIN_WHILE:
+      return (spin_t) SPIN_WHILE_BODY (node);
+      break;
+    default:
+      // Since the kind of node was already validated, the default
+      // action is NOP.
+#ifdef Is_True_On
+      spin_error_report_unhandled ();
+#endif
+      break;
+  }
+}
+
+extern spin_count_t spin_statement_count (spin_t block);
+
+static inline spin_t spin_statement (spin_t block, spin_count_t index)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return (spin_t) NULL;
+  }
+  spin_check (block);
+  if (spin_kind (block) != SPIN_BLOCK)
+    spin_error_report_incompatible_kind (spin_kind (block));
+#endif
+  return (spin_t) SPIN_STATEMENT (block, index);
+}
+
+static inline spin_t spin_return_value (spin_t return_statement)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return (spin_t) NULL;
+  }
+  spin_check (return_statement);
+  if (spin_kind (return_statement) != SPIN_RETURN)
+    spin_error_report_incompatible_kind (spin_kind (return_statement));
+#endif
+  return (spin_t) SPIN_RETURN_VALUE (return_statement); 
+}
+
+#ifdef Is_True_On                                                                
+#define SPIN_OPERAND_DEBUG_SECTION                                                   \
+  if (!spin_is_initialized ()) {                                                     \
+    spin_error_report_libspin_uninitialized ();                                      \
+    return (spin_t) NULL;                                                            \
+  }                                                                                  \
+  spin_check (op);                                                                   \
+  if (!spin_is_expression_kind (spin_kind (op)))                                     \
+    spin_error_report_incompatible_kind (spin_kind (op));                  
+#else 
+#define SPIN_OPERAND_DEBUG_SECTION
+#endif                                                                               
+#define SPIN_OPERAND(prefix)                                                         \
+static inline spin_t spin_ ## prefix ## operand (spin_t op)                          \
+{                                                                                    \
+  SPIN_OPERAND_DEBUG_SECTION;                                                        \
+  return (spin_t) SPIN_ ## prefix ## OPERAND (op);                                   \
+}
+
+SPIN_OPERAND (l)
+SPIN_OPERAND (r)
+
+extern void spin_pretty_print (spin_t node);
+extern spin_status_t spin_close (spin_t node);
+
+static inline spin_t spin_condition (spin_t node)
+{
+#ifdef Is_True_On
+  spin_check (node);
+  if (spin_kind (node) != SPIN_WHILE)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif
+  return (spin_t) SPIN_WHILE_CONDITION (node);
+}
+
+static inline spin_int_t spin_integer_value (spin_t node)
+{
+#ifdef Is_True_On
+  spin_check (node);
+  if (spin_kind (node) != SPIN_INTEGER_CONSTANT)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif
+  return SPIN_INTEGER_CONSTANT_VALUE (node);
+}
+
+#endif // __SPIN_TREE_H__

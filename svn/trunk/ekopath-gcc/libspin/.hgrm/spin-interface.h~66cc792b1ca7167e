@@ -1,0 +1,349 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright 2006 PathScale, Inc. All Rights Reserved.
+//
+// This program is free software; you can redistribute it and/or modify it
+// under the terms of version 2 of the GNU General Public License as
+// published by the Free Software Foundation.
+//
+// This program is distributed in the hope that it would be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+//
+// Further, this software is distributed without any warranty that it is
+// free of the rightful claim of any third person regarding infringement 
+// or the like.  Any license provided herein, whether implied or 
+// otherwise, applies only to this software file.  Patent licenses, if 
+// any, provided herein do not apply to combinations of this program with 
+// other software, or any other product whatsoever.  
+//
+// You should have received a copy of the GNU General Public License along
+// with this program; if not, write the Free Software Foundation, Inc., 59
+// Temple Place - Suite 330, Boston MA 02111-1307, USA.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+#ifndef __SPIN_INTERFACE_H__
+#define __SPIN_INTERFACE_H__
+
+#include "spin-tree.h"
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_open (): Zeroeth call to be made when using libspin. Performs the right
+// initialization. Reads in the opened abstract machine file pointed to by the 
+// argument am_file. Returns spin_t node of kind SPIN_PROGRAM on success. If the 
+// call failed, (spin_t) NULL is returned instead.
+//
+// Note: If you have not called spin_open () all subsequent calls into libspin
+//       will fail. (Debug mode only). This is an a pre-condition to all the 
+//       other libspin calls. Similarly, unless otherwise mentioned, it is 
+//       assumed that the argument to a function is not NULL.
+//
+// Pre-condition: True.
+//
+// Current program represented by the SPIN_PROGRAM node returned by spin_open():
+//   
+// int add2(int x, int y) 
+// {
+//   int z;
+//   z = x + y;
+//   return z;
+// }
+//                                                                                                                                                          
+// unsigned int id(unsigned int n) {
+// {
+//    unsigned int i;
+//    i = 0;
+//    while (i < n) i++;
+//    return i;
+// }
+// 
+//   
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_t spin_open (FILE *am_file);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_kind (): 
+//
+// Returns: The "kind" (flavour) of spin_t node.
+//
+// (The C operator == is defined for spin_kind_t).
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_kind_t spin_kind (spin_t node);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_declaration_count (): 
+//
+// Pre-condition: 
+//
+//   (spin_kind (node) == SPIN_PROGRAM ||
+//    spin_kind (node) == SPIN_BLOCK)
+// 
+// Returns: Count of the declarations in the program or block.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_count_t spin_declaration_count (spin_t node);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_declaration ():
+//
+// Pre-condition: 
+// 
+//   (spin_kind (node) == SPIN_PROGRAM ||
+//    spin_kind (node) == SPIN_BLOCK) &&
+//   (0 <= index && index < spin_declaration_count (node))
+// 
+// Returns: Declaration at index.
+// 
+//   (spin_kind (spin_declaration (node, index)) == SPIN_FUNCTION ||
+//    spin_kind (spin_declaration (node, index)) == SPIN_VAR_DECL)
+// 
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_t spin_declaration (spin_t node, spin_count_t index);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_type ():
+//
+// Pre-condition:
+//
+//  spin_kind (node) == SPIN_FUNCTION ||
+//  spin_kind (node) == SPIN_VAR_DECL ||
+//  spin_is_operator_kind (spin_kind (node)) == spin_true
+//
+// Returns: Return type of the function for a SPIN_FUNCTION node.
+//          The type of the declared variable, in a SPIN_VAR_DECL node.
+//          The type of the result of the operation in an operator node.
+//          The type being qualified as unsigned in a SPIN_UNSIGNED_QUALIFIER 
+//          node.
+//  
+// Currently (spin_kind (spin_type (node)) == SPIN_INTEGER_TYPE)
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_t spin_type (spin_t node);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_name ()
+//
+// Pre-condition: 
+//
+//   (spin_kind (node) == SPIN_FUNCTION ||
+//    spin_kind (node) == SPIN_VAR_DECL)
+//
+// Returns: Name.
+//
+//   spin_kind (spin_name (node)) == SPIN_ID
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_t spin_name (spin_t node);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_string_literal ():
+//
+// Pre-condition:
+// 
+//   spin_kind (node) == SPIN_ID
+//
+// Returns: '\0'-terminated string literal. (Use "%s" to print using printf (3)).
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern const spin_string_t spin_string_literal (spin_t node);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_argument_count ():
+//
+// Pre-condition: (spin_kind (node) == SPIN_FUNCTION)
+//
+// Returns: The argument count of the function.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_count_t spin_argument_count (spin_t node);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_argument ():
+//
+// Pre-condition: (spin_kind (node) == SPIN_FUNCTION) &&
+//                (0 <= index && index < spin_argument_count (node))
+//
+// Returns: Argument at index.
+//
+//   (spin_kind (spin_argument (node, index)) == SPIN_VAR_DECL)
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_t spin_argument (spin_t node, spin_count_t index);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_body ():
+//
+// Pre-condition: (spin_kind (node) == SPIN_FUNCTION ||
+//                 spin_kind (node) == SPIN_WHILE)
+//
+// Returns: Function/while loop body.
+//
+//   (spin_kind (spin_body (node)) == SPIN_BLOCK)
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_t spin_body (spin_t node);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_condition ():
+//
+// Pre-condition: (spin_kind (node) == SPIN_WHILE)
+//
+// Returns: While loop continuation condition.
+//
+// spin_is_expression_kind (spin_kind (spin_condition (spin_t node))) holds.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_t spin_condition (spin_t node);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_statement_count ():
+//
+// Pre-condition: (spin_kind (block) == SPIN_BLOCK)
+//
+// Returns: Count of the statements in the block.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_count_t spin_statement_count (spin_t block);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_statement ():
+//
+// Pre-condition: (spin_kind (block) == SPIN_BLOCK) &&
+//                (0 <= index && index < spin_statement_count (block))
+//
+// Returns: Statement at index.
+//
+// (Currently) spin_kind (spin_statement (block, index)) == SPIN_ASSIGN ||
+//             spin_kind (spin_statement (block, index)) == SPIN_RETURN
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_t spin_statement (spin_t block, spin_count_t index);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_return_value ():
+//
+// Pre-condition: 
+//
+//   (spin_kind (return_statement) == SPIN_RETURN)
+//
+// Returns: The value being returned by the function. If the function has return
+//          type 'void' this would be (spin_t) NULL.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_t spin_return_value (spin_t return_statement);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_is_expression_kind ():
+//
+// Pre-condition: None.
+//
+// Returns: spin_true if 
+//          spin_is_operator_kind (kind) || 
+//          kind == SPIN_VAR_DECL ||
+//          kind == SPIN_INTEGER_CONSTANT
+//          spin_false otherwise.
+// 
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_bool_t spin_is_expression_kind (spin_kind_t kind);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_is_operator_kind ():
+//
+// Returns: spin_true on a kind that represents an operator node.
+//          spin_false otherwise.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_bool_t spin_is_operator_kind (spin_kind_t kind);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_loperand ():
+// spin_roperand ():
+//
+// Pre-condition: spin_is_expression_kind (spin_kind (op))
+// 
+// Returns: Left/Right operand of operator op.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_t spin_loperand (spin_t op);
+extern spin_t spin_roperand (spin_t op);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_integer_value ():
+//
+// Pre-condition: (spin_kind (node) == SPIN_INTEGER_CONSTANT)
+//
+// Returns: The integer value associated with the node.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_int_t spin_integer_value (spin_t node);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_pretty_print (): Pretty print node.
+//
+// Gives a pretty printed representation for use in debugging.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern void spin_pretty_print (spin_t node);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// spin_close (): Last call to be made when using libspin. Performs the necessa-
+// ry cleanup. All the memory for the SPIN_PROGRAM node that was obtained with
+// the spin_open () call would be freed. 
+//
+// Preconditions: node != NULL && spin_kind (node) == SPIN_PROGRAM
+// 
+// Returns the following spin_status_t values to indicate success/failure:
+//
+//  SPIN_EXIT_SUCCESS => libspin closed successfully.
+//  SPIN_EXIT_LIBSPIN_UNINITIALIZED => libspin was not opened.
+//  SPIN_EXIT_STATUS_NULL_NODE => (node == NULL)
+//  SPIN_EXIT_BAD_NODE_KIND SPIN_PROGRAM => (spin_kind (node) != SPIN_PROGRAM)
+//  SPIN_EXIT_BAD_MAGIC_NUMBER
+//  => defined (Is_True_On) and node was not created by libspin.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_status_t spin_close (spin_t node);
+
+#endif // __SPIN_INTERFACE_H__

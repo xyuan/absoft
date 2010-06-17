@@ -1,0 +1,74 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright 2006 PathScale, Inc. All Rights Reserved.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+#ifndef __SPIN_LIST_H__
+#define __SPIN_LIST_H__
+
+#include <stdio.h>
+#include <string.h>
+
+#include "spin-tree.h"
+
+extern spin_t spin_eol; // Mark the end of an SPIN_LIST in the child_vec.
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Function declarations:
+//
+////////////////////////////////////////////////////////////////////////////////
+
+extern spin_bool_t spin_list_is_saturated (spin_t list);
+extern spin_count_t spin_list_length (spin_t list);
+extern spin_count_t spin_list_size (spin_t list);
+extern spin_t spin_list_resize (spin_t list);
+
+static inline spin_t spin_list_element_v (spin_t list, spin_count_t index)
+{
+#ifdef Is_True_On
+  spin_check (list);
+  if (spin_kind (list) != SPIN_LIST)
+    spin_error_report_incompatible_kind (spin_kind (list));
+  if (index >= spin_list_length (list))
+    spin_error_report_out_of_bounds_access ();
+#endif
+  return (spin_t) CHILD_V (list, index);
+}
+
+static inline spin_int_t spin_list_element_i (spin_t list, spin_count_t index)
+{
+#ifdef Is_True_On
+  spin_check (list);
+  if (spin_kind (list) != SPIN_LIST)
+    spin_error_report_incompatible_kind (spin_kind (list));
+  if (index >= spin_list_length (list))
+    spin_error_report_out_of_bounds_access ();
+#endif
+  return (spin_int_t) CHILD_I (list, index);
+}
+
+// Write:
+extern spin_t _spin_list_append (spin_t list, spin_t element);
+
+// Create:
+// Create the universal SPIN_EOL node and return.
+// Will be called only at init time.
+static inline void __spin_eol (void)
+{
+#ifdef Is_True_On
+  if (spin_eol != NULL)
+    spin_error_report_overwrite ();
+#endif
+  spin_eol = __spin (SPIN_EOL);
+  return;
+}
+
+// Destroy:
+static inline void ___spin_eol (void)
+{
+  ___spin (spin_eol);
+  spin_eol = (spin_t) NULL;
+}
+#endif // __SPIN_LIST_H__

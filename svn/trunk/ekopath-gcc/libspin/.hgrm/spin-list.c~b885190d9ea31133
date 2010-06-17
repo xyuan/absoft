@@ -1,0 +1,109 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright 2006 PathScale, Inc. All Rights Reserved.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+#include "spin-list.h"
+
+// Globals:
+
+spin_t spin_eol; // Mark the end of an SPIN_LIST in the child_vec.
+
+// Functions on list:
+
+// Returns the #size# of the list not counting the spin_eol element
+spin_count_t spin_list_size (spin_t list)
+{
+  spin_count_t size = 0;
+  spin_index_t index = 0;
+#ifdef Is_True_On
+  spin_check (list);
+  if (spin_kind (list) != SPIN_LIST)
+    spin_error_report_incompatible_kind (spin_kind (list));
+#endif
+  for (index = 0; CHILD_V (list, index) != spin_eol; index++) 
+    size++;
+  return size;
+}
+
+#if 1
+// Returns the #length# of the list.
+spin_count_t spin_list_length (spin_t list)
+{
+  spin_count_t length = 0;
+  spin_index_t index = 0;
+#ifdef Is_True_On
+  spin_check (list);
+  if (spin_kind (list) != SPIN_LIST)
+    spin_error_report_incompatible_kind (spin_kind (list));
+#endif
+  for (index = 0; CHILD_V (list, index) != spin_eol && CHILD_V (list, index) != NULL; index++) 
+    length++;
+  return length;
+}
+#endif
+
+spin_bool_t spin_list_is_saturated (spin_t list)
+{
+#ifdef Is_True_On
+  spin_check (list);
+  if (spin_kind (list) != SPIN_LIST)
+    spin_error_report_incompatible_kind (spin_kind (list));
+#endif
+  return spin_list_length (list) == spin_list_size (list);
+}
+
+// TODO: If the new list is different than the earlier one, 
+//       you need to free/recycle it here.
+spin_t spin_list_resize (spin_t list)
+{
+  spin_count_t new_size = 0;
+  spin_count_t size = 0;
+  spin_t resized_list = (spin_t) NULL;
+  spin_count_t index = 0;
+#ifdef Is_True_On
+  spin_check (list);
+  if (spin_kind (list) != SPIN_LIST)
+    spin_error_report_incompatible_kind (spin_kind (list));
+  if (spin_list_size (list) != 0 && !spin_list_is_saturated (list))
+    spin_error_report_resizing_unsaturated_list (list);
+#endif
+  size = spin_list_size (list);
+  if (size == 0)
+    new_size = 1;
+  else
+    new_size = size << 1;
+  // NO!!! new_size++; for spin_eol. Why? (Because if it is a well formed list, then
+  // it already had an EOL)!
+  resized_list = (spin_t) spin_realloc (list, sizeof (list[0]) + (1 + size + new_size) * sizeof (spin_t));
+  // Note: (1 + size) is required because sizeof (list [0]) will not account for the
+  // memory already in the child_vec: i.e. size number of slots for the existing elements and one slot 
+  // for spin_eol.
+  for (index = size; index < new_size; index++)
+    CHILD_V (resized_list, index) = (spin_t) NULL;
+  CHILD_V (resized_list, new_size) = spin_eol;
+  return resized_list;
+}
+
+spin_t _spin_list_append (spin_t list, spin_t element)
+{
+  spin_count_t size;
+  spin_index_t index = 0;
+#ifdef Is_True_On
+  spin_check (list);
+  if (spin_kind (list) != SPIN_LIST)
+    spin_error_report_incompatible_kind (spin_kind (list));
+#endif
+  if (spin_list_is_saturated (list))
+    list = spin_list_resize (list);
+  for (index = 0; CHILD_V (list, index) != spin_eol && CHILD_V (list, index) != NULL; index++);
+#ifdef Is_True_On
+  // we have resized the list if it was saturated, so yell if we hit spin_eol.
+  if (CHILD_V (list, index) == spin_eol)
+    spin_error_report_internal_error_hit_eol ();
+#endif
+  // We are at an empty child slot now. fill it.
+  CHILD_V (list, index) = element;
+  return list;
+}

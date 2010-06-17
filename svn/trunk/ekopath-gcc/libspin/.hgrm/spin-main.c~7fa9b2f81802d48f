@@ -1,0 +1,115 @@
+// $Id: spin-main.cxx,v 1.4 2006/01/03 19:35:32 anmol Exp anmol $
+
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+#include <unistd.h>
+#include <stdlib.h>
+#include <assert.h>
+
+#include "spin-eddy.h"
+#include "spin-parser.h"
+
+// Need to set EDDY_FILE_SIZE to the expected eddy file size (TODO: Study correlation).
+// PS: 1024*1024 might be too large!
+#define EDDY_FILE_SIZE 1024*1024
+
+static char *buffer_file(char *filename, unsigned int *file_buffer_length);
+
+int main(int argc, char *argv[], char *env[]) {
+
+  char *file_buffer;
+  unsigned int file_buffer_length;
+  Eddy *edified_program = NULL;
+  Buffer *buffered_program = NULL;
+
+  // assert (EDDY_FILE_SIZE <= SSIZE_MAX);
+
+  if (argc == 2) {
+
+    file_buffer = buffer_file(argv[1], &file_buffer_length);
+
+    if (file_buffer != NULL) {
+
+// #define EDDY_FILE_TO_BUFFER_TEST
+#ifdef EDDY_FILE_TO_BUFFER_TEST
+
+    // Write out the file to stdout so that it could be diffed with the 
+    // original file.
+
+    char *p;
+
+    for (p = file_buffer; p - file_buffer < file_buffer_length; p++) putchar (*p);
+
+#endif
+
+      buffered_program = create_Buffer (file_buffer, file_buffer_length);
+      assert (buffered_program);
+      edified_program = edify (buffered_program);
+      assert (edified_program != NULL); // Could be NULL - what if the file is full of comments?
+
+      // For development only:
+      dump_eddy (edified_program);
+
+      // Now that you have a edified_program, spin it into Whirl!
+      // spin (edified_program);
+
+      // Now, that we are done with the file_buffer, buffered_program, edified_program
+      free_eddy_node (edified_program); 
+      free (file_buffer);
+      destroy_Buffer (buffered_program);
+
+    }
+ 
+  }
+  else { 
+
+    fprintf(stderr, "Require path to eddy file.\n");
+    return -1;
+
+  }
+
+}
+
+// returns a buffer filled in with the contents of the input eddy file. 
+static char *buffer_file(char *filename, unsigned int *file_buffer_length) {
+
+ int fd = 0, current_bytes_read = 0, total_bytes_read = 0;
+
+ char *buffer = NULL;
+ char *buffer_aux = NULL;
+
+ buffer = (char *) calloc (EDDY_FILE_SIZE, (sizeof (char)));
+ assert (buffer != NULL); 
+
+ fd = open (filename, O_RDONLY);
+
+ if (fd > 0) {
+
+   while ((current_bytes_read = read (fd, buffer + total_bytes_read, EDDY_FILE_SIZE)) > 0) {
+
+     total_bytes_read += current_bytes_read;
+     buffer = (char *) realloc (buffer_aux = buffer, 2*total_bytes_read); // Verify that you have read man realloc about the new size
+     assert (buffer != NULL); 
+
+     if (buffer_aux != buffer) 
+       free (buffer_aux);
+
+   }
+
+   if (close (fd) != 0) fprintf (stderr, "eddy file did not close(2) properly.\n");
+
+   *file_buffer_length = total_bytes_read; 
+   return buffer;
+
+ }
+ else {
+
+   *file_buffer_length = 0;
+   return NULL;
+
+ }
+ 
+}

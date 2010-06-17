@@ -1,0 +1,78 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright 2006 PathScale, Inc. All Rights Reserved.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+#include "spin-am.h"
+
+// Read+
+
+spin_t am_open (void)
+{
+  spin_t code_file       = (spin_t) NULL;
+  spin_t type_section    = (spin_t) NULL;
+  spin_t id_section      = (spin_t) NULL;
+  spin_t integer_section = (spin_t) NULL;
+  spin_t string_section  = (spin_t) NULL;
+  spin_t data_section    = (spin_t) NULL;
+  spin_t text_section    = (spin_t) NULL;
+
+  spin_t type_list    = (spin_t) NULL;
+  spin_t id_list      = (spin_t) NULL;
+  spin_t integer_list = (spin_t) NULL;
+  spin_t string_list  = (spin_t) NULL;
+  spin_t data_list    = (spin_t) NULL;
+  spin_t text_list    = (spin_t) NULL;
+
+  spin_open (NULL);
+
+  code_file       = __spin (AM_CODE_FILE);
+
+  type_section    = __spin (AM_TYPE_SECTION);
+  id_section      = __spin (AM_ID_SECTION);
+  integer_section = __spin (AM_INTEGER_SECTION);
+  string_section  = __spin (AM_STRING_SECTION);
+  data_section    = __spin (AM_DATA_SECTION);
+  text_section    = __spin (AM_TEXT_SECTION);
+
+  _spin_am_type_section (code_file, type_section);
+  _spin_am_id_section (code_file, id_section);
+  _spin_am_integer_section (code_file, integer_section);
+  _spin_am_string_section (code_file, string_section);
+  _spin_am_data_section (code_file, data_section);
+  _spin_am_text_section (code_file, text_section);
+
+  type_list    = __spin (SPIN_LIST);
+  id_list      = __spin (SPIN_LIST);
+  integer_list = __spin (SPIN_LIST);
+  string_list  = __spin (SPIN_LIST);
+  data_list    = __spin (SPIN_LIST);
+  text_list    = __spin (SPIN_LIST);
+
+  // Temp:
+  spin_t trial_integer_type = __spin (AM_INTEGER);
+  type_list = _spin_list_append (type_list, trial_integer_type);
+
+  _spin_am_type_list (type_section, type_list);
+  _spin_am_id_list (id_section, id_list);
+  _spin_am_integer_list (integer_section, integer_list);
+  _spin_am_string_list (string_section, string_list);
+  _spin_am_data_list (data_section, data_list);
+  _spin_am_text_list (text_section, text_list);
+
+  return code_file;
+}
+
+spin_status_t am_close (spin_t code_file)
+{
+#ifdef Is_True_On
+  spin_check (code_file);
+  if (spin_kind (code_file) != AM_CODE_FILE)
+    spin_error_report_incompatible_kind (spin_kind (code_file));
+#endif
+
+  ___spin (code_file);
+
+  return spin_close((spin_t) NULL);
+}

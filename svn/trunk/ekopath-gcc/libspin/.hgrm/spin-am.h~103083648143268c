@@ -1,0 +1,281 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright 2006 PathScale, Inc. All Rights Reserved.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+#ifndef __SPIN_AM_H__
+#define __SPIN_AM_H__
+
+#include <stdio.h>
+
+#include "spin-tree.h"
+#include "spin-list.h"
+
+// Read+
+
+extern spin_t am_open (void);
+extern spin_status_t am_close (spin_t am_code_file);
+
+// Note: literals are string literals in the user code.
+//       id's and literals are essentially the same, so these sections will have
+//       indexes into the string section, which is a single repository that we
+//       maintain internally for both.
+
+// Internal+
+static inline spin_t spin_am_type_section (spin_t code_file);
+static inline spin_t spin_am_id_section (spin_t code_file);
+static inline spin_t spin_am_integer_section (spin_t code_file);
+static inline spin_t spin_am_literal_section (spin_t code_file);
+static inline spin_t spin_am_string_section (spin_t code_file);
+static inline spin_t spin_am_data_section (spin_t code_file);
+static inline spin_t spin_am_text_section (spin_t code_file);
+
+static inline spin_t spin_am_type_list (spin_t type_section);
+static inline spin_t spin_am_id_list (spin_t id_section);
+static inline spin_t spin_am_integer_list (spin_t integer_section);
+static inline spin_t spin_am_literal_list (spin_t literal_section);
+static inline spin_t spin_am_string_list (spin_t string_section);
+static inline spin_t spin_am_data_list (spin_t data_section);
+static inline spin_t spin_am_text_list (spin_t text_section);
+// Internal-
+
+// Exposed+
+static inline spin_count_t spin_am_type_count (spin_t code_file);
+static inline spin_count_t spin_am_id_count (spin_t code_file);
+static inline spin_count_t spin_am_integer_count (spin_t code_file);
+static inline spin_count_t spin_am_literal_count (spin_t code_file);
+static inline spin_count_t spin_am_string_count (spin_t code_file);
+static inline spin_count_t spin_am_data_count (spin_t code_file);
+static inline spin_count_t spin_am_text_count (spin_t code_file);
+
+static inline spin_t spin_am_type (spin_t code_file, spin_count_t index);
+static inline spin_t spin_am_id (spin_t code_file, spin_count_t index);
+static inline spin_t spin_am_integer (spin_t code_file, spin_count_t index);
+static inline spin_t spin_am_literal (spin_t code_file, spin_count_t index);
+static inline spin_t spin_am_string (spin_t code_file, spin_count_t index);
+static inline spin_t spin_am_data (spin_t code_file, spin_count_t index);
+static inline spin_t spin_am_text (spin_t code_file, spin_count_t index);
+// Exposed-
+
+#ifdef Is_True_On      
+#define AM_VALIDATE_FILE                                                       \
+  spin_check (code_file);                                                      \
+  if (spin_kind (code_file) != AM_CODE_FILE)                                   \
+    spin_error_report_incompatible_kind (spin_kind (code_file));               
+#else
+#define AM_VALIDATE_FILE
+#endif
+
+#define AM_READ_SECTION(name, NAME)                                            \
+static inline spin_t spin_am_ ## name ## _section (spin_t code_file)           \
+{                                                                              \
+  AM_VALIDATE_FILE;                                                            \
+  return AM_ ## NAME ## _SECTION (code_file);                                  \
+}
+
+AM_READ_SECTION (type, TYPE)
+AM_READ_SECTION (id, ID)
+AM_READ_SECTION (integer, INTEGER)
+AM_READ_SECTION (literal, LITERAL)
+AM_READ_SECTION (string, STRING)
+AM_READ_SECTION (data, DATA)
+AM_READ_SECTION (text, TEXT)
+
+#ifdef Is_True_On
+#define AM_VALIDATE_SECTION(name, NAME)                                        \
+  if (spin_kind (name ## _section) != AM_ ## NAME ## _SECTION)                 \
+    spin_error_report_incompatible_kind (spin_kind (name ## _section));        
+#else
+#define AM_VALIDATE_SECTION(name, NAME)                                          
+#endif
+
+#define AM_READ_LIST(name, NAME)                                               \
+static inline spin_t spin_am_ ## name ## _list (spin_t name ## _section)       \
+{                                                                              \
+  AM_VALIDATE_SECTION (name, NAME);                                            \
+  return AM_ ## NAME ## _LIST (name ## _section);                              \
+}
+
+AM_READ_LIST (type, TYPE)
+AM_READ_LIST (id, ID)
+AM_READ_LIST (integer, INTEGER)
+AM_READ_LIST (literal, LITERAL)
+AM_READ_LIST (string, STRING)
+AM_READ_LIST (data, DATA)
+AM_READ_LIST (text, TEXT)
+
+#define AM_COUNT(name, NAME)                                                   \
+static inline                                                                  \
+spin_count_t spin_am_ ## name ## _count (spin_t code_file)                     \
+{                                                                              \
+  AM_VALIDATE_FILE;                                                            \
+  return spin_list_length (spin_am_ ## name ## _list                           \
+                           (spin_am_ ## name ## _section (code_file)));        \
+}
+
+AM_COUNT (type, TYPE)
+AM_COUNT (id, ID)
+AM_COUNT (integer, INTEGER)
+AM_COUNT (literal, LITERAL)
+AM_COUNT (string, STRING)
+AM_COUNT (data, DATA)
+AM_COUNT (text, TEXT)
+
+#ifdef Is_True_On
+#define AM_VALIDATE_INDEX(name, NAME)                                          \
+  if (index >= spin_am_ ## name ## _count (code_file))                         \
+    spin_error_report_out_of_bounds_access ();
+#else
+#define AM_VALIDATE_INDEX(name, NAME)                                          
+#endif
+
+#define AM_ATTRIBUTE(name, NAME)                                               \
+static inline                                                                  \
+spin_t spin_am_ ## name (spin_t code_file, spin_count_t index)                 \
+{                                                                              \
+  AM_VALIDATE_FILE;                                                            \
+  AM_VALIDATE_INDEX (name, NAME);                                              \
+  return spin_list_element_v (spin_am_ ## name ## _list                        \
+                              (spin_am_ ## name ## _section (code_file)), index);\
+}
+
+AM_ATTRIBUTE (type, TYPE)
+AM_ATTRIBUTE (id, ID)
+AM_ATTRIBUTE (integer, INTEGER)
+AM_ATTRIBUTE (literal, LITERAL)
+AM_ATTRIBUTE (string, STRING)
+AM_ATTRIBUTE (data, DATA)
+AM_ATTRIBUTE (text, TEXT)
+
+
+// The following "lookup" functions perform a search in the relevant sections
+// and return the index of the searched object within it's section. (-1 on
+// "not found").
+// extern spin_index_t spin_am_lookup_type (spin_t code_file, spin_t type);
+extern spin_index_t spin_am_lookup_id (spin_t code_file, spin_string_t lexeme);
+// extern spin_index_t spin_am_lookup_integer (spin_t code_file, spin_t integer);
+extern spin_index_t spin_am_lookup_literal (spin_t code_file, spin_string_t literal);
+
+extern spin_index_t spin_am_lookup_string (spin_t code_file, spin_string_t string);
+
+// extern spin_index_t spin_am_lookup_global (spin_t code_file, spin_string_t var_name);
+// extern spin_index_t spin_am_lookup_function (spin_t code_file, spin_string_t function_name);
+
+// Read-
+
+// Write+
+
+// Internal+
+static inline void _spin_am_type_section (spin_t code_file, spin_t type_section);
+static inline void _spin_am_id_section (spin_t code_file, spin_t type_section);
+static inline void _spin_am_integer_section (spin_t code_file, spin_t type_section);
+static inline void _spin_am_literal_section (spin_t code_file, spin_t type_section);
+static inline void _spin_am_string_section (spin_t code_file, spin_t type_section);
+static inline void _spin_am_data_section (spin_t code_file, spin_t type_section);
+static inline void _spin_am_text_section (spin_t code_file, spin_t type_section);
+
+static inline void _spin_am_type_list (spin_t type_section, spin_t type_list);
+static inline void _spin_am_id_list (spin_t id_section, spin_t type_list);
+static inline void _spin_am_integer_list (spin_t integer_section, spin_t integer_list);
+static inline void _spin_am_literal_list (spin_t literal_section, spin_t literal_list);
+static inline void _spin_am_string_list (spin_t string_section, spin_t string_list);
+static inline void _spin_am_data_list (spin_t data_section, spin_t data_list);
+static inline void _spin_am_text_list (spin_t text_section, spin_t text_list);
+// Internal-
+
+#define AM_WRITE_SECTION(name, NAME)                                           \
+static inline                                                                  \
+void _spin_am_ ## name ## _section (spin_t code_file, spin_t name ## _section) \
+{                                                                              \
+  AM_VALIDATE_FILE;                                                            \
+  AM_VALIDATE_SECTION (name, NAME);                                            \
+  AM_ ## NAME ## _SECTION (code_file) = name ## _section;                      \
+  return;                                                                      \
+}
+
+AM_WRITE_SECTION (type, TYPE)
+AM_WRITE_SECTION (id, ID)
+AM_WRITE_SECTION (integer, INTEGER)
+AM_WRITE_SECTION (literal, LITERAL)
+AM_WRITE_SECTION (string, STRING)
+AM_WRITE_SECTION (data, DATA)
+AM_WRITE_SECTION (text, TEXT)
+
+#ifdef Is_True_On
+#define AM_VALIDATE_LIST(name)                                                 \
+  if (spin_kind (name ## _list) != SPIN_LIST)                                  \
+    spin_error_report_incompatible_kind (spin_kind (name ## _list));        
+#else
+#define AM_VALIDATE_LIST(name)                                                    
+#endif
+
+#define AM_WRITE_LIST(name, NAME)                                              \
+static inline void _spin_am_ ## name ## _list                                  \
+(spin_t name ## _section, spin_t name ## _list)                                \
+{                                                                              \
+  AM_VALIDATE_SECTION (name, NAME);                                            \
+  AM_VALIDATE_LIST (name);                                                     \
+  AM_ ## NAME ## _LIST (name ## _section) = name ## _list;                     \
+  return;                                                                      \
+}
+
+AM_WRITE_LIST (type, TYPE)
+AM_WRITE_LIST (id, ID)
+AM_WRITE_LIST (integer, INTEGER)
+AM_WRITE_LIST (literal, LITERAL)
+AM_WRITE_LIST (string, STRING)
+AM_WRITE_LIST (data, DATA)
+AM_WRITE_LIST (text, TEXT)
+
+static inline spin_index_t _spin_am_insert_type (spin_t code_file, spin_t type);
+static inline spin_index_t _spin_am_insert_id (spin_t code_file, spin_t id);
+static inline spin_index_t _spin_am_insert_integer (spin_t code_file, spin_t integer);
+static inline spin_index_t _spin_am_insert_literal (spin_t code_file, spin_t literal);
+static inline spin_index_t _spin_am_insert_string (spin_t code_file, spin_t string);
+static inline spin_index_t _spin_am_insert_data (spin_t code_file, spin_t data);
+static inline spin_index_t _spin_am_insert_text (spin_t code_file, spin_t text);
+
+// TODO: Refine this logic to check if we already have entered the name'd object
+//       into it's kind of section. e.g. if an id has already been entered, we 
+//       do not want to enter it again - an insert request should just return 
+//       the index to the name'd object in it's section's list. Do this for:
+//       types, id's, string's, 
+
+#if 1
+#define AM_INSERT(name, NAME)                                                  \
+static inline spin_index_t _spin_am_insert_ ## name                            \
+(spin_t code_file, spin_t name)                                                \
+{                                                                              \
+  AM_VALIDATE_FILE;                                                            \
+  spin_index_t inserted_at_index = 0;                                          \
+  spin_t insert_into_list = (spin_t) NULL;                                     \
+  spin_t inserted_into_list = (spin_t) NULL;                                   \
+  insert_into_list = spin_am_ ## name ## _list                                 \
+                     (spin_am_ ## name ## _section (code_file));               \
+  inserted_at_index = (spin_index_t) spin_list_length (inserted_into_list);    \
+  inserted_into_list = _spin_list_append (inserted_into_list, name);           \
+  if (inserted_into_list != insert_into_list)                                  \
+     _spin_am_ ## name ## _list (spin_am_ ## name ## _section (code_file),     \
+                                 inserted_into_list);                          \
+  return inserted_at_index;                                                    \
+}
+#endif
+
+AM_INSERT (type, TYPE)
+AM_INSERT (id, ID)
+AM_INSERT (integer, INTEGER)
+AM_INSERT (literal, LITERAL)
+// AM_INSERT (string, STRING)
+AM_INSERT (data, DATA)
+AM_INSERT (text, TEXT)
+
+// Write-
+
+// Create+
+// Create-
+
+// Destroy+
+// Destroy-
+
+#endif // __SPIN_AM_H__

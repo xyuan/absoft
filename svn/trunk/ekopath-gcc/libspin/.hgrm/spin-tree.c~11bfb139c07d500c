@@ -1,0 +1,615 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// Copyright 2006 PathScale, Inc. All Rights Reserved.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+#include "spin-tree.h"
+#include "spin-am.h"
+#include "spin-list.h"
+
+// TODO: Create a spin-misc.h and all put STRINGIFY in there.
+#define STRINGIFY(s) #s
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Statics:
+//
+////////////////////////////////////////////////////////////////////////////////
+
+static spin_t __spin_test_add2 (void);
+static spin_t __spin_test_id (void);
+
+static spin_t __spin_test_program (void);
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Global Variables:
+//
+////////////////////////////////////////////////////////////////////////////////
+
+spin_bool_t spin_initialized = spin_false;
+
+// Universal nodes that we create one time during initialization:
+spin_t spin_integer_type; // Node for the int type.
+
+spin_count_t spin_sid_count;
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Functions:
+//
+////////////////////////////////////////////////////////////////////////////////
+
+// Initialization:
+
+spin_t spin_open (FILE *am_file)
+{
+
+  // Temporary diagnostic.
+  if (am_file != NULL) {
+    // Read in the file, trigger conversion into spin etc.
+  }
+
+  spin_sid_count = 0;
+
+  // TODO: Abstract this out into the function: __spin_universal_nodes()
+  // Create the universal SPIN_EOL node to mark the end of a SPIN_LIST.
+  __spin_eol ();
+  // Create the universal SPIN_INTEGER_TYPE node for the int type.
+  __spin_integer_type ();
+
+  _spin_is_initialized (spin_true);
+
+  return __spin_test_program ();
+}
+
+// General use:
+
+// Gen+
+
+spin_count_t spin_declaration_count (spin_t node)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return 0;
+  }
+  spin_check (node);
+  if (spin_kind (node) != SPIN_PROGRAM && 
+      spin_kind (node) != SPIN_BLOCK)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif
+  return spin_list_length (spin_declaration_list (node));
+}
+
+static spin_vec_t spin_child_vec (spin_t node)
+{
+#ifdef Is_True_On
+  spin_check (node);
+#endif
+  if (spin_is_childless (spin_kind (node))) {
+      spin_error_report_is_childless ();
+      return (spin_vec_t) NULL;
+  }
+  return (spin_vec_t) CHILD_VECTOR (node);
+}
+
+#define STRINGIFY_KIND(kind) case kind: return STRINGIFY (kind);
+const spin_string_t spin_kind_name (spin_kind_t kind) 
+{
+  switch (kind)
+  {
+
+    STRINGIFY_KIND (AM_GT);
+    STRINGIFY_KIND (AM_LT);
+    STRINGIFY_KIND (AM_RETURN);
+    STRINGIFY_KIND (AM_LABEL);
+    STRINGIFY_KIND (AM_JMP);
+    STRINGIFY_KIND (AM_EQ);
+    STRINGIFY_KIND (AM_CALL);
+    STRINGIFY_KIND (AM_NEG);
+    STRINGIFY_KIND (AM_SUB);
+    STRINGIFY_KIND (AM_ADD);
+    STRINGIFY_KIND (AM_STORE);
+    STRINGIFY_KIND (AM_LOAD);
+
+    STRINGIFY_KIND (AM_BOTTOM_INSTRUCTION);
+    STRINGIFY_KIND (AM_TOP_INSTRUCTION);
+
+    STRINGIFY_KIND (AM_BOTTOM_TYPE);
+    STRINGIFY_KIND (AM_CHAR);
+    STRINGIFY_KIND (AM_POINTER);
+    STRINGIFY_KIND (AM_VOID);
+    STRINGIFY_KIND (AM_UNSIGNED);
+    STRINGIFY_KIND (AM_ARROW);
+    STRINGIFY_KIND (AM_CROSS);
+    STRINGIFY_KIND (AM_INTEGER);
+    STRINGIFY_KIND (AM_TOP_TYPE);
+
+    STRINGIFY_KIND (AM_TOP_SECTION);
+    STRINGIFY_KIND (AM_BOTTOM_SECTION);
+
+    STRINGIFY_KIND (AM_BODY_SECTION);
+    STRINGIFY_KIND (AM_FRAME_SECTION);
+    STRINGIFY_KIND (AM_FUNCTION_SECTION);
+    STRINGIFY_KIND (AM_TEXT_SECTION);
+    STRINGIFY_KIND (AM_DATA_SECTION);
+    STRINGIFY_KIND (AM_STRING_SECTION);
+    STRINGIFY_KIND (AM_LITERAL_SECTION);
+    STRINGIFY_KIND (AM_INTEGER_SECTION);
+    STRINGIFY_KIND (AM_ID_SECTION);
+    STRINGIFY_KIND (AM_TYPE_SECTION);
+    STRINGIFY_KIND (AM_CODE_FILE);   
+  
+    STRINGIFY_KIND (SPIN_BOTTOM);
+    STRINGIFY_KIND (SPIN_FUNCTION);
+    STRINGIFY_KIND (SPIN_INTEGER_TYPE);
+    STRINGIFY_KIND (SPIN_INTEGER_CONSTANT);
+    STRINGIFY_KIND (SPIN_UNSIGNED_QUALIFIER);
+    STRINGIFY_KIND (SPIN_ID);
+    STRINGIFY_KIND (SPIN_RETURN);
+    STRINGIFY_KIND (SPIN_PLUS);
+    STRINGIFY_KIND (SPIN_ASSIGN);
+    STRINGIFY_KIND (SPIN_LESS);
+    STRINGIFY_KIND (SPIN_EOL);
+    STRINGIFY_KIND (SPIN_PROGRAM);
+    STRINGIFY_KIND (SPIN_WHILE);
+    STRINGIFY_KIND (SPIN_LIST);
+    STRINGIFY_KIND (SPIN_VAR_DECL);
+    STRINGIFY_KIND (SPIN_BLOCK);
+    STRINGIFY_KIND (SPIN_TOP);
+  }
+}
+
+spin_char_t padder;
+
+#define PAD for (padding = 0; padding < *level; padding++) printf ("%c", padder);
+static void spin_pretty_print_core (spin_t node, spin_count_t *level)
+{
+#ifdef Is_True_On
+  // TODO: Yell if level is NULL.
+#endif
+  spin_count_t index, padding;
+  if (node == (spin_t) NULL) {
+    PAD; printf ("NULL!\n");
+    return;
+  }
+
+#ifndef Is_True_On
+  PAD; printf ("%s\n", spin_kind_name (spin_kind (node)));
+#else
+  PAD;
+  if (!spin_emitted (node)) {
+    printf ("%s (%d)\n", spin_kind_name (spin_kind (node)) , spin_sid (node));
+    _spin_emitted (node, spin_true);
+  }
+  else {
+    printf ("%d\n", spin_sid (node));
+    return;
+  }
+#endif
+
+  (*level)++;
+  switch (spin_kind (node)) {
+
+    // Functionality for pretty printing abstract machine files:
+
+    case AM_CODE_FILE:
+      padder = ' ';
+      spin_pretty_print_core (spin_am_type_section (node), level);
+      spin_pretty_print_core (spin_am_id_section (node), level);
+      spin_pretty_print_core (spin_am_integer_section (node), level);
+      spin_pretty_print_core (spin_am_string_section (node), level);
+      spin_pretty_print_core (spin_am_data_section (node), level);
+      spin_pretty_print_core (spin_am_text_section (node), level);
+      break;
+
+#define PRETTY_PRINT_CODE_FILE_SECTION(NAME, name)                             \
+    case AM_ ## NAME ## _SECTION:                                              \
+      for (index = 0;                                                          \
+           index < spin_list_length (spin_am_ ## name ## _list (node));        \
+           index++) {                                                          \
+        spin_pretty_print_core (spin_list_element_v (spin_am_ ## name ## _list (node), index), level); \
+      }                                                                        \
+      break;
+
+    PRETTY_PRINT_CODE_FILE_SECTION (TYPE, type);
+    PRETTY_PRINT_CODE_FILE_SECTION (ID, id);
+    PRETTY_PRINT_CODE_FILE_SECTION (INTEGER, integer);
+    PRETTY_PRINT_CODE_FILE_SECTION (STRING, string);
+    PRETTY_PRINT_CODE_FILE_SECTION (DATA, data);
+    PRETTY_PRINT_CODE_FILE_SECTION (TEXT, text);
+
+    case AM_INTEGER:
+      // Has been printed. Just return.
+      break;
+
+    // Functionality for pretty printing semantic trees:
+
+    case SPIN_PROGRAM:
+      padder = '.';
+      // PAD; printf ("Program-declarations:\n");
+      for (index = 0; index < spin_declaration_count (node); index++) {
+        // PAD; printf ("Declaration %d:\n", index);
+        spin_pretty_print_core (spin_declaration (node, index), level);
+      }
+      break;
+    case SPIN_FUNCTION:
+      PAD; printf ("Name:\n"); 
+           spin_pretty_print_core (spin_name (node), level);
+      PAD; printf ("Return-type:\n"); 
+           spin_pretty_print_core (spin_type (node), level);
+      PAD; printf ("Arguments:\n");
+           for (index = 0; index < spin_argument_count (node); index++) {
+             // PAD; printf ("Argument %d:\n", index);
+             spin_pretty_print_core (spin_argument (node, index), level);
+           }
+      PAD; printf ("Body:\n");
+           spin_pretty_print_core (spin_body (node), level);
+      break;
+    case SPIN_ID:
+      PAD; printf ("%s\n", spin_string_literal (node));
+      break;
+    case SPIN_INTEGER_TYPE:
+      // PAD; printf ("int\n");
+      break;
+    case SPIN_VAR_DECL:
+      PAD; printf ("Type:\n");
+      spin_pretty_print_core (spin_type (node), level);
+      PAD; printf ("Name:\n");
+      spin_pretty_print_core (spin_name (node), level);
+      break;
+    case SPIN_BLOCK:
+      PAD; printf ("Block-declarations:\n");
+      for (index = 0; index < spin_declaration_count (node); index++) {
+        // PAD; printf ("Declaration %d:\n", index);
+        spin_pretty_print_core (spin_declaration (node, index), level);
+      }
+      PAD; printf ("Block-statements:\n");
+      for (index = 0; index < spin_statement_count (node); index++) {
+        // PAD; printf ("Statement %d:\n", index);
+        spin_pretty_print_core (spin_statement (node, index), level);
+      }
+      break;
+
+    case SPIN_WHILE:
+      PAD; printf ("While-condition:\n");
+      spin_pretty_print_core (spin_condition (node), level);
+      PAD; printf ("While-body:\n");
+      spin_pretty_print_core (spin_body (node), level);
+      break;
+
+    case SPIN_ASSIGN:
+      // PAD; printf ("=\n");
+      goto PRINT_OPS;
+    case SPIN_PLUS:
+      // PAD; printf ("+\n");
+      goto PRINT_OPS;
+    case SPIN_LESS:
+      goto PRINT_OPS;
+
+      PRINT_OPS:
+        PAD; printf ("Type:\n");
+        spin_pretty_print_core (spin_type (node), level);
+        PAD; printf ("Left-operand:\n");
+        spin_pretty_print_core (spin_loperand (node), level);
+        PAD; printf ("Right-operand:\n");
+        spin_pretty_print_core (spin_roperand (node), level);
+
+      break;
+
+    case SPIN_UNSIGNED_QUALIFIER:
+      spin_pretty_print_core (spin_type (node), level);
+      break;
+
+    case SPIN_INTEGER_CONSTANT:
+      PAD; printf ("%d\n", spin_integer_value (node));
+      break;
+
+    case SPIN_RETURN:
+      // PAD; printf ("return\n");
+      spin_pretty_print_core (spin_return_value (node), level);
+      break;
+    default: 
+      printf ("No pretty-print support for %s yet.\n", spin_kind_name (spin_kind (node)));
+      break;
+  }
+  (*level)--;
+  return;
+}
+
+void spin_pretty_print (spin_t node) 
+{
+  spin_count_t level;
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return;
+  }
+  spin_check (node);
+#endif
+  level = 0;
+  spin_pretty_print_core (node, &level);
+}
+
+
+spin_count_t spin_argument_count (spin_t node)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return 0;
+  }
+  spin_check (node);
+  if (spin_kind (node) != SPIN_FUNCTION)
+    spin_error_report_incompatible_kind (spin_kind (node));
+#endif
+  return spin_list_length (spin_argument_list (node));
+}
+
+spin_count_t spin_statement_count (spin_t block)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return 0;
+  }
+  spin_check (block);
+  if (spin_kind (block) != SPIN_BLOCK)
+    spin_error_report_incompatible_kind (spin_kind (block));
+#endif
+  return (spin_list_length (spin_statement_list (block)));
+}
+
+spin_status_t spin_close (spin_t node)
+{
+#ifdef Is_True_On
+  if (!spin_is_initialized ()) {
+    spin_error_report_libspin_uninitialized ();
+    return SPIN_EXIT_LIBSPIN_UNINITIALIZED;
+  }
+#endif
+
+  if (node != (spin_t) NULL) {
+    if (spin_kind (node) != SPIN_PROGRAM)
+      return SPIN_EXIT_BAD_NODE_KIND;
+
+#ifdef Is_True_On
+    if (spin_magic_number (node) != SPIN_MAGIC_NUMBER)
+      return SPIN_EXIT_BAD_MAGIC_NUMBER;
+#endif
+
+    ___spin (node);
+  }
+
+  // DELETEME spin_sid_count = 0;
+  ___spin_eol ();
+  ___spin_integer_type ();
+
+  return SPIN_EXIT_SUCCESS; 
+}
+
+// Gen-
+
+// Write-:
+
+// Create:
+
+static spin_t __spin_test_program (void) 
+{
+  spin_t program              = (spin_t) NULL,
+         program_decl_list    = (spin_t) NULL;
+
+  program           = __spin (SPIN_PROGRAM);
+  program_decl_list = __spin (SPIN_LIST);
+
+  program_decl_list = _spin_list_append (program_decl_list, __spin_test_add2());
+  program_decl_list = _spin_list_append (program_decl_list, __spin_test_id());
+
+  _spin_declaration_list (program, program_decl_list);
+
+  return program;
+}
+
+static spin_t __spin_test_add2(void)
+{
+  spin_t function             = (spin_t) NULL,
+         name                 = (spin_t) NULL,
+         return_type          = (spin_t) NULL,
+         argument_list        = (spin_t) NULL,
+         var_decl_x           = (spin_t) NULL,
+         var_decl_y           = (spin_t) NULL,
+         name_x               = (spin_t) NULL,
+         name_y               = (spin_t) NULL,
+         block                = (spin_t) NULL,
+         block_decl_list      = (spin_t) NULL,
+         block_statement_list = (spin_t) NULL,
+         var_decl_z           = (spin_t) NULL,
+         name_z               = (spin_t) NULL,
+         plus_op              = (spin_t) NULL,
+         assign_op            = (spin_t) NULL,
+         return_statement     = (spin_t) NULL;
+
+  // Create all the nodes that we care about:
+  function             = __spin (SPIN_FUNCTION);
+  name                 = __spin (SPIN_ID);
+  return_type          = __spin (SPIN_INTEGER_TYPE);
+  argument_list        = __spin (SPIN_LIST);
+  var_decl_x           = __spin (SPIN_VAR_DECL);
+  var_decl_y           = __spin (SPIN_VAR_DECL);
+  name_x               = __spin (SPIN_ID);
+  name_y               = __spin (SPIN_ID);
+  block                = __spin (SPIN_BLOCK);
+  block_decl_list      = __spin (SPIN_LIST);
+  block_statement_list = __spin (SPIN_LIST);
+  var_decl_z           = __spin (SPIN_VAR_DECL);
+  name_z               = __spin (SPIN_ID);
+  plus_op              = __spin (SPIN_PLUS);
+  assign_op            = __spin (SPIN_ASSIGN);
+  return_statement     = __spin (SPIN_RETURN);
+
+  // Assemble the add2 function from these nodes created:
+  // Fill in the name of the function:
+  _spin_string_literal (name, "add2");
+  // Attach the name node to the function node:
+  _spin_name (function, name);
+  // Attach the return type node to the function node:
+  _spin_type (function, return_type);
+
+  _spin_string_literal (name_x, "x");
+  _spin_name (var_decl_x, name_x);
+  _spin_type (var_decl_x, spin_integer_type);
+  argument_list = _spin_list_append (argument_list, var_decl_x); 
+
+  _spin_string_literal (name_y, "y");
+  _spin_name (var_decl_y, name_y);
+  _spin_type (var_decl_y, spin_integer_type);
+  argument_list = _spin_list_append (argument_list, var_decl_y);
+  
+  _spin_argument_list (function, argument_list);
+
+  _spin_string_literal (name_z, "z");
+  _spin_name (var_decl_z, name_z);
+  _spin_type (var_decl_z, spin_integer_type);
+  block_decl_list = _spin_list_append (block_decl_list, var_decl_z);
+
+  _spin_declaration_list (block, block_decl_list);
+
+  _spin_loperand (plus_op, var_decl_x);
+  _spin_roperand (plus_op, var_decl_y);
+  _spin_type (plus_op, spin_integer_type);
+
+  _spin_loperand (assign_op, var_decl_z);
+  _spin_roperand (assign_op, plus_op);
+  _spin_type (assign_op, spin_integer_type);
+
+  _spin_return_value (return_statement, var_decl_z);
+
+  block_statement_list = _spin_list_append (block_statement_list, assign_op);
+  block_statement_list = _spin_list_append (block_statement_list, return_statement);
+
+  _spin_statement_list (block, block_statement_list);
+
+  _spin_body (function, block);
+
+  return function;
+}
+
+static spin_t __spin_test_id (void)
+{
+  spin_t function             = (spin_t) NULL,
+         function_name        = (spin_t) NULL,
+         unsigned_integer_type   = (spin_t) NULL,
+         return_type          = (spin_t) NULL,
+         argument_list        = (spin_t) NULL,
+         var_decl_n           = (spin_t) NULL,
+         name_n               = (spin_t) NULL,
+         block                = (spin_t) NULL,
+         block_decl_list      = (spin_t) NULL,
+         block_statement_list = (spin_t) NULL,
+         var_decl_i           = (spin_t) NULL,
+         name_i               = (spin_t) NULL,
+         less_op              = (spin_t) NULL,
+         while_stmt           = (spin_t) NULL,
+         plus_op              = (spin_t) NULL,
+         assign_op_init       = (spin_t) NULL,
+         assign_op            = (spin_t) NULL,
+         while_body           = (spin_t) NULL,
+         while_condition      = (spin_t) NULL,
+         while_body_decl_list = (spin_t) NULL,
+         while_body_stmt_list = (spin_t) NULL,
+         const_0              = (spin_t) NULL,
+         const_1              = (spin_t) NULL,
+         return_statement     = (spin_t) NULL;
+
+  function              = __spin (SPIN_FUNCTION);
+  function_name         = __spin (SPIN_ID);
+  unsigned_integer_type = __spin (SPIN_UNSIGNED_QUALIFIER);
+  return_type           = __spin (SPIN_INTEGER_TYPE);
+  argument_list         = __spin (SPIN_LIST);
+  var_decl_n            = __spin (SPIN_VAR_DECL);
+  name_n                = __spin (SPIN_ID);
+  block                 = __spin (SPIN_BLOCK);
+  block_decl_list       = __spin (SPIN_LIST);
+  block_statement_list  = __spin (SPIN_LIST);
+  var_decl_i            = __spin (SPIN_VAR_DECL);
+  name_i                = __spin (SPIN_ID);
+  less_op               = __spin (SPIN_LESS);
+  while_stmt            = __spin (SPIN_WHILE);
+  plus_op               = __spin (SPIN_PLUS);
+  while_condition       = __spin (SPIN_BLOCK);
+  while_body            = __spin (SPIN_BLOCK);
+  while_body_decl_list  = __spin (SPIN_LIST);
+  while_body_stmt_list  = __spin (SPIN_LIST);
+  const_0               = __spin (SPIN_INTEGER_CONSTANT);
+  const_1               = __spin (SPIN_INTEGER_CONSTANT);
+  assign_op_init        = __spin (SPIN_ASSIGN);
+  assign_op             = __spin (SPIN_ASSIGN);
+  return_statement      = __spin (SPIN_RETURN);
+
+  // Fill in the name of the function:
+  _spin_string_literal (function_name, "id");
+  // Attach the name node to the function node:
+  _spin_name (function, function_name);
+
+  _spin_type (unsigned_integer_type, spin_integer_type);
+  _spin_type (function, unsigned_integer_type);
+
+  _spin_string_literal (name_n, "n");
+  _spin_name (var_decl_n, name_n);
+  _spin_type (var_decl_n, unsigned_integer_type);
+  argument_list = _spin_list_append (argument_list, var_decl_n);
+
+  _spin_argument_list (function, argument_list);
+
+  _spin_string_literal (name_i, "i");
+  _spin_name (var_decl_i, name_i);
+  _spin_type (var_decl_i, unsigned_integer_type);
+  block_decl_list = _spin_list_append (block_decl_list, var_decl_i);
+
+  _spin_declaration_list (block, block_decl_list);
+
+  _spin_integer_value (const_0, 0);
+  _spin_loperand (assign_op_init, var_decl_i);
+  _spin_roperand (assign_op_init, const_0);
+  _spin_type (assign_op_init, unsigned_integer_type);
+  block_statement_list = _spin_list_append (block_statement_list, assign_op_init);
+
+  _spin_loperand (less_op, var_decl_i);
+  _spin_roperand (less_op, var_decl_n);
+  _spin_type (less_op, unsigned_integer_type);
+  while_condition = less_op;
+
+  _spin_integer_value (const_1, 1);
+
+  _spin_loperand (plus_op, var_decl_i);
+  _spin_roperand (plus_op, const_1);
+  _spin_type (plus_op, unsigned_integer_type);
+
+  _spin_loperand (assign_op, var_decl_i);
+  _spin_roperand (assign_op, plus_op);
+  _spin_type (assign_op, unsigned_integer_type);
+
+  while_body_stmt_list = _spin_list_append (while_body_stmt_list, assign_op);
+
+  _spin_declaration_list (while_body, while_body_decl_list);
+  _spin_statement_list (while_body, while_body_stmt_list);
+
+  _spin_condition (while_stmt, while_condition);
+  _spin_body (while_stmt, while_body);
+  block_statement_list = _spin_list_append (block_statement_list, while_stmt);
+
+  _spin_return_value (return_statement, var_decl_i);
+  block_statement_list = _spin_list_append (block_statement_list, return_statement);
+
+  _spin_statement_list (block, block_statement_list);
+  _spin_body (function, block);
+
+  return function;
+}
+
+// Create-
+
+// Destroy+
+// Destroy-

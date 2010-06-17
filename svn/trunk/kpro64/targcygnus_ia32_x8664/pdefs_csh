@@ -1,0 +1,8 @@
+setenv PSC_MAJOR_VERSION "0"
+setenv PSC_MINOR_VERSION "8"
+setenv PSC_PATCH_LEVEL "0"
+setenv PSC_FULL_VERSION "0."
+setenv PSC_NAME_PREFIX "a"
+setenv PSC_TARGET "x86-64"
+setenv PSC_GCC_VERSION "3.3.1"
+setenv PSC_INSTALL_PREFIX "~/absoft_ld"

@@ -1,0 +1,280 @@
+###############################################################################
+#
+# macros
+#
+###############################################################################
+
+ifeq ($(PRODUCTION),1)
+OPT=
+VAR=
+else
+OPT=BUILD_OPTIMIZE=DEBUG
+ifdef APPLE
+VAR=OPTIMIZER=-gdwarf-2
+else
+VAR=OPTIMIZER=-g
+endif
+endif
+#OPTS+=-v
+
+
+ifeq ($(CYGWIN),1)
+OPT+= CYGWIN=1 ABSOFT_FC=1 BUILD_TARGET=X64
+endif
+
+ifeq ($(BUILD_COMPILER),"ACC")
+COMPILER=BUILD_COMPILER=ACC
+endif
+
+ifeq ($(BUILD_COMPILER),"PSC)
+COMPILER=BUILD_COMPILER=PSC PSC_ROOT_PREFIX=$PATHSCALE PSC_NAME_PREFIX=path
+endif
+
+
+
+###############################################################################
+#
+# build rules
+#
+###############################################################################
+
+.PHONY: setup build_libcomutil build_libelf build_libdwarf build_libfortran build_libu build_libfe90_sgi \
+	build_libgfecc build_libfe90 build_libarith build_libcif
+
+default: setup build_libcomutil build_libelf build_libdwarf build_libfortran build_libu build_libfe90_sgi \
+	build_libgfecc build_libfe90 build_libarith build_libcif
+
+
+
+setup:
+	if [ ! -e $(ADEV_ROOT)/pathscale_libs ]; then \
+		mkdir -p $(ADEV_ROOT)/pathscale_libs; \
+	fi
+	@echo "##########***** making atmod_libs *****##########"
+ifeq ($(PRODUCTION),1)
+	@echo "PRODUCTION=RELEASE"
+else
+	@echo "PRODUCTION=DEBUG"
+endif
+	#@echo "BUILD_COMPILER value is $(BUILD_COMPILER)"
+
+
+
+build_libcomutil:
+#ifeq ($(BUILD_COMPILER),"ACC")
+#	export LD_LIBRARY_PATH=$(ABSOFT)/shlib:$(ABSOFT)/shlib64; \
+#endif
+#ifeq ($(BUILD_COMPILER),"PSC")
+#	export LD_LIBRARY_PATH=$(PATHSCALE)/lib/2.2.1:$(PATHSCALE)/lib/2.2.1/32; \
+#endif
+	@echo "##########***** making libcomutil *****##########"
+	cd libcomutil; $(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	echo "cp libcomutil.a $(ADEV_ROOT)/pathscale_libs/"; \
+	cp libcomutil.a $(ADEV_ROOT)/pathscale_libs/; \
+	cd ..
+ifdef APPLE
+	ranlib $(ADEV_ROOT)/pathscale_libs/libcomutil.a
+endif
+
+
+build_libelf:
+	@echo "##########***** making libelf *****##########"
+	cd libelf; 	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cd ..
+
+build_libdwarf:
+	@echo "##########***** making libdwarf *****##########"
+	cd libdwarf; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp libdwarf.a $(ADEV_ROOT)/pathscale_libs/; \
+	cd ..
+ifdef APPLE
+	ranlib $(ADEV_ROOT)/pathscale_libs/libdwarf.a
+endif
+
+build_libfortran:
+	@echo "##########***** making libfortran *****##########"
+ifeq ($(APPLE),1)
+	@echo "########## NO LEADING underscore support for Intel Fortran compiler ##########"
+	if [ ! -e ../libfi/matrix/matrix.NOUNDERSCORE.txt ]; then \
+	cd ../libfi; cp -f ./matrix.cygwin/*.f ./matrix; echo "These files are for compilers that do not support leading underscore in subroutine name" > ./matrix/matrix.NOUNDERSCORE.txt; \
+	fi	
+endif
+#ifeq ($(CYGWIN),1)
+#	@echo "########## NO LEADING underscore support for CYGWIN ##########"
+#	if [ ! -e ../libfi/matrix/matrix.CYGWIN.txt ]; then \
+#	cd ../libfi; cp -f ./matrix.cygwin/*.f ./matrix; echo "These files are for compilers that do not support leading underscore in subroutine name" > ./matrix/matrix.CYGWIN.txt; \
+#	fi
+#endif
+	cd libfortran; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp libfortran.a $(ADEV_ROOT)/pathscale_libs/; \
+	cd ..
+ifdef APPLE
+	ranlib $(ADEV_ROOT)/pathscale_libs/libfortran.a
+endif
+
+build_libu:
+	@echo "##########***** making libu *****##########"
+	cd libu; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp libffio.a $(ADEV_ROOT)/pathscale_libs/; \
+	cd ..
+ifdef APPLE
+	ranlib $(ADEV_ROOT)/pathscale_libs/libffio.a
+endif
+
+build_libfe90_sgi:
+	@echo "##########***** making libfe90_sgi.a *****##########"
+	cd crayf90/sgi; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 fe90_sgi.a  $(COMPILER) ; \
+	cp fe90_sgi.a $(ADEV_ROOT)/pathscale_libs/libfe90_sgi.a; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 compiler_build_date.c $(COMPILER) ; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 compiler_build_date.o $(COMPILER) ; \
+	echo "cp compiler_build_date.o $(ADEV_ROOT)/pathscale_libs/compiler_build_date.o"; \
+	cp compiler_build_date.o $(ADEV_ROOT)/pathscale_libs/compiler_build_date.o; \
+	cd ../..
+ifdef APPLE
+	ranlib $(ADEV_ROOT)/pathscale_libs/libfe90_sgi.a
+endif
+
+build_libgfecc:
+	@echo "##########***** making libgfecc *****##########"
+	cd g++fe/gnu; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 libgfecc.a $(COMPILER) ; \
+	cp libgfecc.a $(ADEV_ROOT)/pathscale_libs/; \
+	cd ../..
+ifdef APPLE
+	ranlib $(ADEV_ROOT)/pathscale_libs/libgfecc.a
+endif
+
+
+build_libfe90:
+	@echo "##########***** making libfe90 *****##########"
+	cd crayf90/fe90; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 STAB_FOLD=1 fe90.a $(COMPILER) ; \
+	cp fe90.a $(ADEV_ROOT)/pathscale_libs/libfe90.a; \
+	cd ../..
+ifdef APPLE
+	ranlib $(ADEV_ROOT)/pathscale_libs/libfe90.a
+endif
+
+build_libarith:
+	@echo "##########***** making libarith *****##########"
+	cd arith; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp arith.a $(ADEV_ROOT)/pathscale_libs/libarith.a; \
+	cd ..
+ifdef APPLE
+	ranlib $(ADEV_ROOT)/pathscale_libs/libarith.a
+endif
+
+build_libcif:
+	@echo "##########***** making libcif *****##########"
+	cd libcif; \
+	$(MAKE) $(OPT) $(VAR) V=1 ABSOFT_EXTENSIONS=1 $(COMPILER) ; \
+	cp libcif.a $(ADEV_ROOT)/pathscale_libs/; \
+	cd ..
+ifdef APPLE
+	ranlib $(ADEV_ROOT)/pathscale_libs/libcif.a
+endif
+
+
+
+
+
+
+###############################################################################
+#
+# clobber
+#
+###############################################################################
+
+.PHONY: clobber_libcomutil clobber_libelf clobber_libdwarf clobber_libfortran clobber_libu clobber_libfe90_sgi \
+	clobber_libgfecc clobber_libfe90 clobber_libarith clobber_libcif
+
+clobber: clobber_libcomutil clobber_libelf clobber_libdwarf clobber_libfortran clobber_libu clobber_libfe90_sgi \
+	clobber_libgfecc clobber_libfe90 clobber_libarith clobber_libcif
+	cd include; $(MAKE) clobber;
+
+
+clobber_libcomutil:
+	cd libcomutil; $(MAKE) clobber;
+
+clobber_libelf:
+	cd libelf; $(MAKE) clobber;
+
+clobber_libdwarf:
+	cd libdwarf; $(MAKE) clobber;
+
+clobber_libfortran:
+	cd libfortran; $(MAKE) clobber;
+
+clobber_libu:
+	cd libu; $(MAKE) clobber;
+
+clobber_libfe90_sgi:
+	cd crayf90/sgi; $(MAKE) clobber;
+
+clobber_libgfecc:
+	cd g++fe/gnu; $(MAKE) clobber;
+
+clobber_libfe90:
+	cd crayf90/fe90; $(MAKE) clobber;
+
+clobber_libarith:
+	cd arith; $(MAKE) clobber;
+
+clobber_libcif:
+	cd libcif; $(MAKE) clobber;
+
+
+
+
+
+
+
+###############################################################################
+#
+# clean
+#
+###############################################################################
+
+.PHONY: clean_libcomutil clean_libelf clean_libdwarf clean_libfortran clean_libu clean_libfe90_sgi \
+	clean_libgfecc clean_libfe90 clean_libarith clean_libcif
+
+clean: clean_libcomutil clean_libelf clean_libdwarf clean_libfortran clean_libu clean_libfe90_sgi \
+	clean_libgfecc clean_libfe90 clean_libarith clean_libcif
+
+
+clean_libcomutil:
+	cd libcomutil; $(MAKE) clean;
+
+clean_libelf:
+	cd libelf; $(MAKE) clean;
+
+clean_libdwarf:
+	cd libdwarf; $(MAKE) clean;
+
+clean_libfortran:
+	cd libfortran; $(MAKE) clean;
+
+clean_libu:
+	cd libu; $(MAKE) clean;
+
+clean_libfe90_sgi:
+	cd crayf90/sgi; $(MAKE) clean;
+
+clean_libgfecc:
+	cd g++fe/gnu; $(MAKE) clean;
+
+clean_libfe90:
+	cd crayf90/fe90; $(MAKE) clean;
+
+clean_libarith:
+	cd arith; $(MAKE) clean;
+
+clean_libcif:
+	cd libcif; $(MAKE) clean;
+
+

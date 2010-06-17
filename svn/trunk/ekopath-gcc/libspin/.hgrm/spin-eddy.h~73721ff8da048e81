@@ -1,0 +1,5 @@
+// $Id: spin-eddy.h,v 1.3 2006/01/03 03:24:09 anmol Exp $
+
+#ifndef __SPIN_EDDY_H__
+#define __SPIN_EDDY_H__
+#endif // __SPIN_EDDY_H__
