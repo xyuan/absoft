@@ -3964,6 +3964,9 @@ Gather_Uplevel_References ( WN * block, INT32 level, WN * parent,
             USRCPOS_srcpos(srcpos) = WN_Get_Linenum(tree);
             Set_Error_Line(USRCPOS_linenum(srcpos));
 #endif
+#ifdef ABSOFT_EXTENSIONS
+	    if( !ST_is_temp_var(st) )
+#endif
             ErrMsg ( EC_MPLOWER_shared_store, st );
           }
 	  shared_table[shared_count++] = st;

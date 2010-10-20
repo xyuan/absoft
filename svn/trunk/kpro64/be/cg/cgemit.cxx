@@ -48,8 +48,8 @@
 /* ====================================================================
  *
  * Module: cgemit.c
- * $Revision: 2971 $
- * $Date: 2009-02-04 09:16:09 -0500 (Wed, 04 Feb 2009) $
+ * $Revision: 3236 $
+ * $Date: 2010-07-13 11:13:13 -0400 (Tue, 13 Jul 2010) $
  * $Author: yin $
  * $Source$
  *
@@ -202,6 +202,7 @@ extern BOOL profile_arcs;
 BOOL CG_emit_asm_dwarf    = TRUE;
 BOOL CG_emit_unwind_info  = TRUE;
 #ifdef ABSOFT_EXTENSIONS
+BOOL CG_emit_dwarf_loc = FALSE;
 // [YIN2005-12-15] [JIRA BE-115]
 BOOL CG_create_data_buffer = TRUE;
 static INT64 CG_bss_section_id = 0; 	/* Used to count bbs sections for MACOSX */
@@ -422,7 +423,12 @@ Init_Section (ST *st)
 	    power = 0;
 	    for (tmp = STB_align(st); tmp > 1; tmp >>= 1) power++;
 	    
-	    fprintf ( Asm_File, "\t.lcomm\t.bss$%llx ,%lld, %d\n", CGEMIT_Get_Next_BSS_Section_Id(), ST_size(st)-Last_bss_section_offset, power );
+	    ST* pu_st = Get_Current_PU_ST();
+	    if( pu_st == NULL ){
+		    fprintf ( Asm_File, "\t.lcomm\t.bss$%llx ,%lld, %d\n", CGEMIT_Get_Next_BSS_Section_Id(), ST_size(st)-Last_bss_section_offset, power );	    
+	    }else{
+	    	    fprintf ( Asm_File, "\t.lcomm\t.bss$%s_%llx ,%lld, %d\n", ST_name(Get_Current_PU_ST()), CGEMIT_Get_Next_BSS_Section_Id(), ST_size(st)-Last_bss_section_offset, power );
+	    }
 	    CG_bss_section_emitted = TRUE;
     	    Reset_bss_section_base = TRUE;
 	}
@@ -695,7 +701,7 @@ EMT_Write_Qualified_Name (FILE *f, ST *st)
 	fputs(ST_name(st), f);
 #ifdef TARG_X64
         /* for name mangle in STDCALL 32bit Windows ABI */
-        if( Is_Target_32bit() && ST_class(st) == CLASS_FUNC && ST_is_STDCALL(st) ){
+        if( Is_Target_32bit() && ST_class(st) == CLASS_FUNC && ST_is_STDCALL(st) && Is_PU_arg_area_size_inited( ST_pu_type (st) ) == TRUE){
 		fprintf(Asm_File, "@%d", Get_PU_arg_area_size( ST_pu_type (st) ) );	    	
         }
 #endif
@@ -942,7 +948,13 @@ mINT32 EMT_Put_Elf_Symbol_BSS_Section (ST *sym )
   
   // Generate a new one, BSS$x
   thisbss_name[0] = '\0';
-  sprintf( thisbss_name, ".bss$%llx", CGEMIT_Get_This_BSS_Section_Id() );
+
+  ST* pu_st = Get_Current_PU_ST();
+  if( pu_st == NULL ){
+       sprintf( thisbss_name, ".bss$%llx",CGEMIT_Get_This_BSS_Section_Id() );
+  }else{
+  	sprintf( thisbss_name, ".bss$%s_%llx", ST_name(Get_Current_PU_ST()),CGEMIT_Get_This_BSS_Section_Id() );
+  }
   
   symother = st_other_for_sym (sym);
   
@@ -1087,7 +1099,7 @@ mINT32 EMT_Put_Elf_Symbol (ST *sym)
 #ifdef TARG_X64
 	      /* for name mangle in STDCALL 32bit Windows ABI */
 	      if( Is_Target_32bit() && ST_class(sym) == CLASS_FUNC ){
-	          if( ST_is_STDCALL(sym) ){
+	          if( ST_is_STDCALL(sym) && Is_PU_arg_area_size_inited( ST_pu_type (sym) ) == TRUE){
 		      /* stdcall */
 		      fprintf(Asm_File, "\t%s\t_%s@%d\n", AS_GLOBAL, ST_name(sym), Get_PU_arg_area_size( ST_pu_type (sym) ) );	    	
 		  }else{
@@ -1174,7 +1186,7 @@ mINT32 EMT_Put_Elf_Symbol (ST *sym)
 #ifdef TARG_X64
 	    /* for name mangle in STDCALL 32bit Windows ABI */
 	    if( Is_Target_32bit() && ST_class(sym) == CLASS_FUNC){
-		if( ST_is_STDCALL(sym) ){
+		if( ST_is_STDCALL(sym) && Is_PU_arg_area_size_inited( ST_pu_type (sym) ) == TRUE ){
 		    fprintf(Asm_File, "\t%s\t_%s@%d\n", AS_GLOBAL, ST_name(sym), Get_PU_arg_area_size( ST_pu_type (sym) ) );	    	
                 }else{
                     fprintf(Asm_File, "\t%s\t_%s\n", AS_GLOBAL, ST_name(sym));
@@ -1399,7 +1411,12 @@ r_apply_l_const (
 	
 #if defined(ABSOFT_EXTENSIONS) && defined(__APPLE__)
 	if( strcmp( ST_name(st), ".bss" ) == 0 ){
-	       vstr_sprintf(buf, vstr_len(*buf), "$%llx", CGEMIT_Get_This_BSS_Section_Id() );  
+	       ST* pu_st = Get_Current_PU_ST();
+	       if( pu_st == NULL ){
+	            vstr_sprintf(buf, vstr_len(*buf), "$%llx", CGEMIT_Get_This_BSS_Section_Id() );  
+	       }else{
+	            vstr_sprintf(buf, vstr_len(*buf), "$%s_%llx", ST_name(Get_Current_PU_ST()), CGEMIT_Get_This_BSS_Section_Id() );  
+	       }
 	}
 #endif
 	
@@ -1408,11 +1425,11 @@ r_apply_l_const (
 	if( Is_Target_32bit() && ST_class(st) == CLASS_FUNC && ST_is_STDCALL(st) ){
 		/* check if type info contains parameter information */
 		TY_IDX call_ty = ST_pu_type(st);
-		if( Get_PU_arg_area_size( call_ty ) == 0 ){
+/*		if( Get_PU_arg_area_size( call_ty ) == 0 ){
 			TY& ty = Ty_Table[call_ty];
 			TYLIST_IDX idx = ty.Tylist();
 			if( Tylist_Table[idx] != 0 ){
-			  /* Compute arg area size */	
+			  // Compute arg area size 
 			  PLOC ploc;
 			  ploc = Setup_Output_Parameter_Locations(call_ty);
 			  ++idx;
@@ -1422,7 +1439,8 @@ r_apply_l_const (
 			  }  
 			  Set_PU_arg_area_size( call_ty, PLOC_total_size(ploc) );
 			}
-		}
+		}*/
+	     if( Is_PU_arg_area_size_inited(call_ty) == TRUE )
 		vstr_sprintf(buf, vstr_len(*buf), "@%d", Get_PU_arg_area_size( ST_pu_type (st) )  );
 	}
 #endif
@@ -6835,7 +6853,7 @@ EMT_Emit_PU ( ST *pu, DST_IDX pu_dst, WN *rwn )
 #ifdef TARG_X64
         /* for name mangle in STDCALL 32bit Windows ABI */
         if( Assembly && Is_Target_32bit() && ST_class(sym) == CLASS_FUNC){
-	    if( ST_is_STDCALL(sym) ){
+	    if( ST_is_STDCALL(sym) && Is_PU_arg_area_size_inited( ST_pu_type (sym) ) == TRUE ){
 		fprintf(Asm_File, "\t%s\t _%s@%d\n", AS_GLOBAL, ST_name(sym), Get_PU_arg_area_size( ST_pu_type (sym) ) );	    	
 	    }else{
 		fprintf (Asm_File, "\t%s\t _%s\n", AS_GLOBAL, ST_name(sym));    
@@ -6906,7 +6924,7 @@ EMT_Emit_PU ( ST *pu, DST_IDX pu_dst, WN *rwn )
   /* for name mangle in STDCALL 32bit Windows ABI */
   
   if( Is_Target_32bit() && ST_class(pu) == CLASS_FUNC ){
-      if( ST_is_STDCALL(pu) ){
+      if( ST_is_STDCALL(pu) && Is_PU_arg_area_size_inited( ST_pu_type (pu) ) == TRUE){
           fprintf(Asm_File, "\t.size _%s@%d, %s-_%s@%d\n", 
                         ST_name(pu), Get_PU_arg_area_size( ST_pu_type (pu) ),
                         LABEL_name(Last_Label),
@@ -7555,7 +7573,7 @@ EMT_End_File( void )
 #ifdef TARG_X64
                         /* for name mangle in STDCALL 32bit Windows ABI */
                         if( Is_Target_32bit() && ST_class(sym) == CLASS_FUNC ){
-	                    if( ST_is_STDCALL(sym) ){
+	                    if( ST_is_STDCALL(sym) && Is_PU_arg_area_size_inited( ST_pu_type (sym) ) == TRUE ){
 		                fprintf(Asm_File, "\t%s\t_%s@%d\n", AS_GLOBAL, newname, Get_PU_arg_area_size( ST_pu_type (sym) ) );	    	
 	                    }else{
 		                fprintf (Asm_File, "\t%s\t_%s\n",  AS_GLOBAL, newname);    
@@ -7669,7 +7687,7 @@ EMT_End_File( void )
 #ifdef TARG_X64
                /* for name mangle in STDCALL 32bit Windows ABI */
                if( Is_Target_32bit() && ST_class(sym) == CLASS_FUNC ){
-	           if( ST_is_STDCALL(sym) ){
+	           if( ST_is_STDCALL(sym) && Is_PU_arg_area_size_inited( ST_pu_type (sym) ) == TRUE){
 	               fprintf(Asm_File, "\t%s\t _%s@%d\n", AS_GLOBAL, ST_name(sym), Get_PU_arg_area_size( ST_pu_type (sym) ) );	    	
                    }else{
 	               fprintf (Asm_File, "\t%s\t _%s\n", AS_GLOBAL, ST_name(sym));    
@@ -7697,7 +7715,7 @@ EMT_End_File( void )
 #ifdef TARG_X64
                /* for name mangle in STDCALL 32bit Windows ABI */
                if( Is_Target_32bit() && ST_class(sym) == CLASS_FUNC ){
-	           if( ST_is_STDCALL(sym) ){
+	           if( ST_is_STDCALL(sym) && Is_PU_arg_area_size_inited( ST_pu_type (sym) ) == TRUE ){
 	               fprintf(Asm_File, "\t%s\t _%s@%d\n", AS_GLOBAL, ST_name(sym), Get_PU_arg_area_size( ST_pu_type (sym) ) );	    	
                    }else{
 	               fprintf (Asm_File, "\t%s\t _%s\n", AS_GLOBAL, ST_name(sym));
@@ -7829,9 +7847,12 @@ EMT_End_File( void )
 	fprintf ( Asm_File, "\t.section .drectve\n");  
 	FOREACH_SYMBOL (GLOBAL_SYMTAB, sym, i) {
  	  if (ST_class(sym) == CLASS_FUNC && ST_sclass(sym) != SCLASS_EXTERN ){
-	 	  
-	      if( Is_Target_32bit() ){
-	          if( ST_is_STDCALL(sym) ){
+	
+	      const PU& pu = Pu_Table[ST_pu(sym)];
+	      if( PU_mp( pu ) != FALSE ){
+	       	  // no output
+	      }else if( Is_Target_32bit() ){
+	          if( ST_is_STDCALL(sym) && Is_PU_arg_area_size_inited( ST_pu_type (sym) ) == TRUE){
 		      /* stdcall */
 		      fprintf( Asm_File, "\t.ascii \"-export:_%s@%d \"\n", ST_name(sym), Get_PU_arg_area_size( ST_pu_type (sym) ) );	   
 		  }else{

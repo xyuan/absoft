@@ -7248,7 +7248,8 @@ static WN *lower_store(WN *block, WN *tree, LOWER_ACTIONS actions)
         WN_Set_Linenum (stid, WN_Get_Linenum(tree));
         WN_INSERT_BlockLast(block, stid);
 
-        WN_Delete(WN_kid0(tree));
+	// No need to release WN_kid0(tree) because it has been deleted in lower_complex_expr
+        WN_kid0(tree) = NULL;
 	WN_kid0(tree) = WN_Ldid(MTYPE_F8, 0, c4temp_st, MTYPE_To_TY(MTYPE_I8));
 	WN_set_desc(tree, MTYPE_I8);
 	return tree;
@@ -7280,7 +7281,8 @@ static WN *lower_store(WN *block, WN *tree, LOWER_ACTIONS actions)
         WN_Set_Linenum (stid, WN_Get_Linenum(tree));
         WN_INSERT_BlockLast(block, stid);
 
-        WN_Delete(WN_kid0(tree));
+	// No need to release WN_kid0(tree) because it has been deleted in lower_complex_expr
+        WN_kid0(tree) = NULL;
 	WN_Delete( tree );
 
 	ldid = WN_Ldid( mtype, 4, c4temp_st, MTYPE_To_TY(mtype) );
@@ -7319,7 +7321,8 @@ static WN *lower_store(WN *block, WN *tree, LOWER_ACTIONS actions)
         WN_Set_Linenum (stid, WN_Get_Linenum(tree));
         WN_INSERT_BlockLast(block, stid);
 
-        WN_Delete(WN_kid0(tree));
+	// No need to release WN_kid0(tree) because it has been deleted in lower_complex_expr
+        WN_kid0(tree) = NULL;
 	WN_Delete( tree );
 
 	ldid = WN_Ldid( mtype, 4, c4temp_st, MTYPE_To_TY(mtype) );
@@ -7370,7 +7373,8 @@ static WN *lower_store(WN *block, WN *tree, LOWER_ACTIONS actions)
         WN_Set_Linenum (stid, WN_Get_Linenum(tree));
         WN_INSERT_BlockLast(block, stid);
 
-        WN_Delete(WN_kid0(tree));
+	// No need to release WN_kid0(tree) because it has been deleted in lower_complex_expr
+	WN_kid0(tree) = NULL;
 	WN_kid0(tree) = WN_Ldid(MTYPE_F8, 0, c4temp_st, MTYPE_To_TY(MTYPE_F8));
 	WN_set_desc(tree, MTYPE_F8);
 	return tree;
@@ -7405,7 +7409,8 @@ static WN *lower_store(WN *block, WN *tree, LOWER_ACTIONS actions)
         WN_Set_Linenum (stid, WN_Get_Linenum(tree));
         WN_INSERT_BlockLast(block, stid);
 
-        WN_Delete(WN_kid0(tree));
+	// No need to release WN_kid0(tree) because it has been deleted in lower_complex_expr
+	WN_kid0(tree) = NULL;
 	WN_Delete( tree );
 
 	ldid = WN_Ldid( mtype, 4, c4temp_st, MTYPE_To_TY(mtype) );
@@ -10756,6 +10761,14 @@ static WN *lower_call(WN *block, WN *tree, LOWER_ACTIONS actions)
   {
       Set_PU_arg_area_size(call_ty, PLOC_total_size(ploc));
   }
+#ifdef TARG_X64
+  else if( num_actuals == 0 &&
+        callee_st != NULL &&    // ICALL, callee_st is NULL. I have no idea about to get ST for ICALL so far -- YIN  
+      ST_is_STDCALL(callee_st) &&
+      Get_PU_arg_area_size(call_ty) == 0 ){
+      Set_PU_arg_area_size(call_ty, 0);	      
+  }      
+#endif
 
 
  /*

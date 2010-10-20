@@ -8,9 +8,9 @@
 // ====================================================================
 //
 // Module: opt_main.cxx
-// $Revision: 162 $
-// $Date: 2005-08-09 15:23:30 -0400 (Tue, 09 Aug 2005) $
-// $Author: aer $
+// $Revision: 3205 $
+// $Date: 2010-05-13 12:35:05 -0400 (Thu, 13 May 2010) $
+// $Author: yin $
 // $Source$
 //
 // ====================================================================
@@ -1142,9 +1142,6 @@ Pre_Optimizer(INT32 phase, WN *wn_tree, DU_MANAGER *du_mgr,
 	LOWER_IO_STATEMENT |
 	LOWER_ENTRY_EXIT |
 	LOWER_SHORTCIRCUIT |
-#ifdef KEY
-	LOWER_UPLEVEL |
-#endif
 	lower_region_exits_flag;	// this is a variable
     
     if (WOPT_Enable_Bits_Load_Store)

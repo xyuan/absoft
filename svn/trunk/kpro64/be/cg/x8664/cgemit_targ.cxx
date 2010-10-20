@@ -48,8 +48,8 @@
 /* ====================================================================
  *
  * Module: cgemit_targ.c
- * $Revision: 3052 $
- * $Date: 2009-06-29 14:24:18 -0400 (Mon, 29 Jun 2009) $
+ * $Revision: 3236 $
+ * $Date: 2010-07-13 11:13:13 -0400 (Tue, 13 Jul 2010) $
  * $Author: yin $
  * $Source$
  *
@@ -187,6 +187,9 @@ CGEMIT_Prn_Line_Dir_In_Asm (USRCPOS usrcpos)
   if (CG_emit_non_gas_syntax){
 //    fprintf (Asm_File, "\t.line\t%d\t", 
 //	     USRCPOS_linenum(usrcpos));
+#ifdef ABSOFT_EXTENSIONS
+    if( CG_emit_dwarf_loc )
+#endif
     fprintf (Asm_File, "# .loc\t%d\t%d\t%d\n", 
 	     USRCPOS_filenum(usrcpos)-1,
 	     USRCPOS_linenum(usrcpos),
@@ -194,6 +197,9 @@ CGEMIT_Prn_Line_Dir_In_Asm (USRCPOS usrcpos)
   }else{
 //    fprintf (Asm_File, "\t.line\t%d\t", 
 //	     USRCPOS_linenum(usrcpos));  
+#ifdef ABSOFT_EXTENSIONS
+    if( CG_emit_dwarf_loc )
+#endif
     fprintf (Asm_File, "# .loc\t%d\t%d\t%d\n", 
 	     USRCPOS_filenum(usrcpos),
 	     USRCPOS_linenum(usrcpos),
@@ -201,15 +207,29 @@ CGEMIT_Prn_Line_Dir_In_Asm (USRCPOS usrcpos)
   }
 #else
   if (CG_emit_non_gas_syntax)
+#ifdef ABSOFT_EXTENSIONS
+  {
+    if( CG_emit_dwarf_loc )
+#endif
     fprintf (Asm_File, "\t.loc\t%d\t%d\t%d\n", 
 	     USRCPOS_filenum(usrcpos)-1,
 	     USRCPOS_linenum(usrcpos),
 	     USRCPOS_column(usrcpos));
+#ifdef ABSOFT_EXTENSIONS
+  }else{
+#else
   else
+#endif
+#ifdef ABSOFT_EXTENSIONS
+    if( CG_emit_dwarf_loc )
+#endif
     fprintf (Asm_File, "\t.loc\t%d\t%d\t%d\n", 
 	     USRCPOS_filenum(usrcpos),
 	     USRCPOS_linenum(usrcpos),
 	     USRCPOS_column(usrcpos));  
+#ifdef ABSOFT_EXTENSIONS
+  }
+#endif
 #endif  
   }
 
@@ -564,7 +584,12 @@ CGEMIT_Relocs_In_Asm (TN *t, ST *st, vstring *buf, INT64 *val)
          	    strcmp( ST_name(st), ".rodata" ) == 0 ) {
 	            asprintf( &str, "\"L%s\"-\"%s\"%+lld(%%ebx) ", ST_name(st), LABEL_name(PU_PIC_Base_Label_Idx) ,*val); 
 	        }else if(  strcmp( ST_name(st), ".bss" ) == 0 ){
-		    asprintf( &str, "\"%s$%llx\"-\"%s\"%+lld(%%ebx) ", ST_name(st), CGEMIT_Get_This_BSS_Section_Id(), LABEL_name(PU_PIC_Base_Label_Idx) ,*val);
+		    ST* pu_st = Get_Current_PU_ST();
+		    if( pu_st == NULL ){
+			    asprintf( &str, "\"%s$%llx\"-\"%s\"%+lld(%%ebx) ", ST_name(st),CGEMIT_Get_This_BSS_Section_Id(), LABEL_name(PU_PIC_Base_Label_Idx) ,*val);
+		    }else{
+		    	asprintf( &str, "\"%s$%s_%llx\"-\"%s\"%+lld(%%ebx) ", ST_name(st),  ST_name(Get_Current_PU_ST()), CGEMIT_Get_This_BSS_Section_Id(), LABEL_name(PU_PIC_Base_Label_Idx) ,*val);
+		    }
 		}else{
                     asprintf( &str, "\"%s\"-\"%s\"%+lld(%%ebx) ", ST_name(st), LABEL_name(PU_PIC_Base_Label_Idx) ,*val);
 		}	    

@@ -10,7 +10,7 @@ VAR=
 else
 OPT=BUILD_OPTIMIZE=DEBUG
 ifdef APPLE
-VAR=OPTIMIZER=-gdwarf-2
+VAR=OPTIMIZER=-g
 else
 VAR=OPTIMIZER=-g
 endif
@@ -20,6 +20,10 @@ endif
 
 ifeq ($(CYGWIN),1)
 OPT+= CYGWIN=1 ABSOFT_FC=1 BUILD_TARGET=X64
+endif
+
+ifdef APPLE
+OPT+= ABSOFT_FC=1
 endif
 
 ifeq ($(BUILD_COMPILER),"ACC")

@@ -36,9 +36,9 @@
  * ====================================================================
  *
  * Module: erbe.desc
- * $Revision: 162 $
- * $Date: 2005-08-09 15:23:30 -0400 (Tue, 09 Aug 2005) $
- * $Author: aer $
+ * $Revision: 3071 $
+ * $Date: 2009-08-20 15:24:50 -0400 (Thu, 20 Aug 2009) $
+ * $Author: yin $
  * $Source$
  *
  * Revision history:
@@ -57,7 +57,7 @@
  * ====================================================================
  */
 
-static char *erbe_desc_rcs_id = "$Source$ $Revision: 162 $";
+static char *erbe_desc_rcs_id = "$Source$ $Revision: 3071 $";
 
 #include "erbe.h"
 
@@ -226,7 +226,7 @@ ERROR_DESC EDESC_BE[] = {
   { EC_MPLOWER_red_badop, EM_User | ES_ERRPHASE, RAG_EN_NONE,
     "Illegal reduction operator for reduction variable %s",
     1, ET_SYMTAB, 0, 0, 0, 0, 0 },
-  { EC_MPLOWER_shared_store, EM_User | ES_WARNING, RAG_EN_NONE,
+  { EC_MPLOWER_shared_store, EM_User | ES_ADVISORY, RAG_EN_NONE,
     "Referenced scalar variable %s is SHARED by default",
     1, ET_SYMTAB, 0, 0, 0, 0, 0 },
   { EC_MPLOWER_local_nosize, EM_User | ES_ERRPHASE, RAG_EN_NONE,

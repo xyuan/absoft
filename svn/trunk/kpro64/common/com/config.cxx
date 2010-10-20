@@ -49,8 +49,8 @@
  * ====================================================================
  *
  * Module: config.c
- * $Revision: 3044 $
- * $Date: 2009-06-12 10:11:37 -0400 (Fri, 12 Jun 2009) $
+ * $Revision: 3066 $
+ * $Date: 2009-08-03 16:01:18 -0400 (Mon, 03 Aug 2009) $
  * $Author: yin $
  * $Source$
  *
@@ -73,7 +73,7 @@
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
-static char *rcs_id = "$Source$ $Revision: 3044 $";
+static char *rcs_id = "$Source$ $Revision: 3066 $";
 #endif /* _KEEP_RCS_ID */
 
 #define __STDC_LIMIT_MACROS
@@ -1566,12 +1566,14 @@ Configure_Source ( char	*filename )
 	      Recip_Allowed_F4Only = TRUE; // for doduc
 	    }
 #ifndef __APPLE__
-#ifdef TARG_X64
-	    if( Is_Target_64bit() ) /* no 32bit acml so far */
-#endif
+#ifndef TARG_X64
+	    /* no 32bit acml so far */
+	    /* 64bit cannot be put in /lib64, so manual*/
+
 	    if( !OPT_Fast_Math_Set ){	    
 		OPT_Fast_Math = TRUE;  // use acml
  	    }
+#endif	    
 #endif
 	    // -LNO:fu=9:full_unroll_size=7000:trip_count=100
 #ifdef BACK_END

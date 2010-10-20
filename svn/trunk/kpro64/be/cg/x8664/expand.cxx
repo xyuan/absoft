@@ -49,8 +49,8 @@
  * ====================================================================
  *
  * Module: expand.c
- * $Revision: 2913 $
- * $Date: 2008-10-03 10:45:29 -0400 (Fri, 03 Oct 2008) $
+ * $Revision: 3082 $
+ * $Date: 2009-08-31 13:41:53 -0400 (Mon, 31 Aug 2009) $
  * $Author: yin $
  * $Source$
  *
@@ -4306,6 +4306,50 @@ Expand_Select (
     Build_OP( is_double ? TOP_andnpd : TOP_andnps, tmp5, tmp3, false_tn, ops );
     Build_OP( is_double ? TOP_orpd : TOP_orps, dest_tn, tmp5, tmp4, ops );
 
+#ifdef ABSOFT_EXTENSIONS
+  } else if( !non_sse2_fp && TN_register_class(dest_tn) == ISA_REGISTER_CLASS_x87 ){
+    // dest is x87,  need an extra copy 
+    TN* result_tn = Build_TN_Of_Mtype( mtype );
+
+    // SSE2 floats, intergral vectors
+    TN *tmp3 = Build_TN_Like(result_tn);
+    TN *tmp4 = Build_TN_Like(result_tn);
+    TN *tmp5 = Build_TN_Like(result_tn);
+
+    // Need to generate a constant of size result_tn
+    BOOL is_double = (TN_size(result_tn) == 8); 
+    TYPE_ID imtype = is_double ? MTYPE_I8 :MTYPE_I4;
+    TYPE_ID fmtype = is_double ? MTYPE_F8 :MTYPE_F4;
+
+    TN* tmp1 = Build_TN_Of_Mtype( imtype );
+    TN* tmp2 = Build_TN_Of_Mtype( imtype );
+
+    Expand_Shift (tmp1, cond_tn, Gen_Literal_TN(is_double?63:31, 4), 
+		  is_double?MTYPE_I8:MTYPE_I4, shift_left, ops);
+    Expand_Shift (tmp2, tmp1, Gen_Literal_TN(is_double?63:31, 4), 
+		  is_double?MTYPE_I8:MTYPE_I4, shift_aright, ops);
+    /* Don't use Expand_Int_To_Float, which will convert the all 1's
+       value to fp format. */
+#if 0
+    Build_OP( TOP_movg2x, tmp3, tmp2, ops );
+#else
+    //TY_IDX ty = Spill_Int_Type;
+    TY_IDX ty = MTYPE_To_TY( imtype );
+    ST* st = Gen_Temp_Symbol( ty, "movd" );
+    Allocate_Temp_To_Memory( st );
+
+    //TYPE_ID imtype = TY_mtype(ST_type(st));
+    Exp_Store( imtype, tmp2, st, 0, ops, 0 );
+    Exp_Load( fmtype, fmtype, tmp3, st, 0, ops, 0 );
+#endif
+    Build_OP( is_double ? TOP_andpd : TOP_andps, tmp4, true_tn, tmp3, ops );
+    Build_OP( is_double ? TOP_andnpd : TOP_andnps, tmp5, tmp3, false_tn, ops );
+    Build_OP( is_double ? TOP_orpd : TOP_orps, result_tn, tmp5, tmp4, ops );
+
+    // copy back
+    Expand_Copy( dest_tn, result_tn, mtype, ops );
+
+#endif
   } else {
     FmtAssert(FALSE, ("Handle this case"));
   }

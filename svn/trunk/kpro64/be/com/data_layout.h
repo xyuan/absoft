@@ -42,8 +42,8 @@
  * ====================================================================
  *
  * Module: data_layout.h
- * $Revision: 2795 $
- * $Date: 2007-12-26 09:40:43 -0500 (Wed, 26 Dec 2007) $
+ * $Revision: 3083 $
+ * $Date: 2009-09-10 16:03:28 -0400 (Thu, 10 Sep 2009) $
  * $Author: yin $
  * $Source$
  *
@@ -174,6 +174,9 @@ inline BOOL ST_has_formal_preg_num (const ST *const st)
 /* Map arg-area-size to the corresponding PU */
 extern UINT32 Get_PU_arg_area_size(PU_IDX);
 extern void Set_PU_arg_area_size(PU_IDX, UINT32 size);
+#ifdef TARG_X64
+extern BOOL Is_PU_arg_area_size_inited(TY_IDX pu);
+#endif
 
 /* size of actual build area for current PU */
 extern INT32 Current_PU_Actual_Size;	

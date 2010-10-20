@@ -39,7 +39,7 @@
 
 #ifdef _KEEP_RCS_ID
 static const char source_file[] = __FILE__;
-static const char rcs_id[] = "$Source$ $Revision: 2915 $";
+static const char rcs_id[] = "$Source$ $Revision: 3061 $";
 #endif
 
 #include <stdio.h>
@@ -65,8 +65,11 @@ INT data_alignment_factor;
 
 static Dwarf_P_Debug dw_dbg;
 static Dwarf_Error dw_error;
-
+#if defined(ABSOFT_EXTENSIONS) && defined(__APPLE__)
+#define MAX_DWARF_SECTIONS 21
+#else
 #define MAX_DWARF_SECTIONS 20
+#endif
 static pSCNINFO dwarf_scn[MAX_DWARF_SECTIONS];
 static size_t num_dwarf_scns = 0;
 /* Allocate only one cie for the whole file. */

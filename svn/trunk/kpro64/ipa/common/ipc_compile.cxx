@@ -1898,7 +1898,26 @@ static void exec_smake (char* sh_cmdfile_name)
   argv[1] = sh_cmdfile_name;
   argv[2] = 0;
   
-  execve (sh_name, argv, environ_vars);
+#ifdef TARG_X64
+#ifdef __CYGWIN__
+  // Detect duplicated path variables
+  // It happens, espeically with SPEC benchmark. 
+  int i = 0;
+  int found = 0;
+  while( environ_vars[i] != NULL ){
+    if( strncmp( "PATH=", environ_vars[i], 5 ) == 0 ){
+       if( found == 0 ) found = 1;
+       else{
+       	  // disable them
+	  environ_vars[i][0] = '!';
+       }
+    }
+    i++;
+  }
+#endif
+#endif
+    
+  execve (sh_name, argv, environ_vars ); 
 
   // if the first try fails, use the user's search path
   execvp ("sh", argv);

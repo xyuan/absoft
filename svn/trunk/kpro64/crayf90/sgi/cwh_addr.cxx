@@ -41,8 +41,8 @@
  * ====================================================================
  *
  * Module: cwh_addr
- * $Revision: 2629 $
- * $Date: 2007-03-21 11:54:23 -0400 (Wed, 21 Mar 2007) $
+ * $Revision: 3104 $
+ * $Date: 2009-10-23 10:25:11 -0400 (Fri, 23 Oct 2009) $
  * $Author: sr $
  *
  * Revision history:
@@ -2354,6 +2354,12 @@ cwh_addr_find_section(WN * awn , enum p_flag flag)
 
     case OPR_ADD:
     case OPR_SUB:
+#if defined(ABSOFT_EXTENSIONS)
+    case OPR_MPY:
+    case OPR_DIV:
+    case OPR_NEG:
+#endif
+
       wn = cwh_addr_find_section(WN_kid0(awn),flag);
 
       if (wn == WN_kid0(awn)) 

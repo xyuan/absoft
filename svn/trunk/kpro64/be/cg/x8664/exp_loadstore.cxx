@@ -150,7 +150,11 @@ Pick_Load_Instruction (TYPE_ID rtype, TYPE_ID desc,
   case MTYPE_U8:
     if (rclass == ISA_REGISTER_CLASS_mmx)
       return base == NULL ? TOP_ld64_2m_n32 : TOP_ld64_2m;
+#ifdef ABSOFT_EXTENSIONS   
+    return base == NULL ? (is_reloc_x8664_64 ? TOP_ld64_abs : TOP_ld64_off) :
+#else      
     return base == NULL ? TOP_ld64_off :
+#endif    
 	   is_reloc_x8664_64 ? TOP_ld64_abs : TOP_ld64;
   case MTYPE_F4:
     if (rclass == ISA_REGISTER_CLASS_float)
@@ -1877,6 +1881,13 @@ Exp_Ldst (
 	} else if (mcmodel < MEDIUM &&
 		   ISA_LC_Value_In_Class(base_ofst, LC_simm32)) {
 	    base_tn = Rip_TN();
+#ifdef ABSOFT_EXTENSIONS
+	} else if ( Gen_PIC_Shared && mcmodel >= MEDIUM ){
+	    // -fpic -mcmodel=medium
+	    base_tn = Rip_TN();	    
+	} else if ( Gen_PIC_Shared &&  !ISA_LC_Value_In_Class(base_ofst, LC_simm32) ) {
+	    base_tn = Rip_TN();	    	    
+#endif
 	} else {
 
 #ifdef ABSOFT_EXTENSIONS
@@ -2031,6 +2042,15 @@ Exp_Ldst (
 	  // got address should not alias
 	  Set_OP_no_alias(OPS_last(&newops));
 	  base_tn = new_base;
+#ifdef ABSOFT_EXTENSIONS
+	  if( !ISA_LC_Value_In_Class(base_ofst, LC_simm32) ){
+		ofst_tn = Build_TN_Of_Mtype(Pointer_Mtype);
+		Build_OP( TOP_movabsq, ofst_tn, Gen_Literal_TN(base_ofst,8), &newops );
+		base_tn = Build_TN_Of_Mtype(Pointer_Mtype);
+		Build_OP( TOP_add64, base_tn, new_base, ofst_tn, &newops );
+		ofst_tn = Gen_Literal_TN( 0, 4 );
+	  }else
+#endif
 	  ofst_tn = Gen_Literal_TN( base_ofst, 4 );
 
 	} else {

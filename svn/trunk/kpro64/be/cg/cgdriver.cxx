@@ -953,6 +953,10 @@ static OPTION_DESC Options_CG[] = {
     0, 0, 0, &CG_inhibit_size_directive, NULL },
 #endif
 #ifdef ABSOFT_EXTENSIONS
+  { OVK_BOOL,   OV_INTERNAL, TRUE,  "emit_loc", "",
+    0,0,0,      &CG_emit_dwarf_loc, NULL,
+    "Turn on/off emission of .loc directives into .s file [Default ON]"
+  },
   { OVK_BOOL,	OV_INTERNAL, TRUE,  "remove_fxch", "",
     0,0,0,      &CG_x87_fxch_remove, NULL, 
     "reorder the load instruction for removing the need of fxch insertion"
@@ -1372,6 +1376,11 @@ Configure_CG_Options(void)
 #ifdef ABSOFT_EXTENSIONS
   if( CG_opt_level > 0 ){
     x87_Control_Fixed = TRUE;
+  }
+  
+  if( Debug_Level > 0 ){
+    // with -g 
+    CG_emit_dwarf_loc = TRUE;
   }
 #endif
 

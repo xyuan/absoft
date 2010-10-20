@@ -49,8 +49,8 @@
  * =======================================================================
  *
  *  Module: localize.c
- *  $Revision: 2913 $
- *  $Date: 2008-10-03 10:45:29 -0400 (Fri, 03 Oct 2008) $
+ *  $Revision: 3170 $
+ *  $Date: 2010-03-02 10:50:14 -0500 (Tue, 02 Mar 2010) $
  *  $Author: yin $
  *  $Source: be/cg/SCCS/s.localize.cxx $
  *
@@ -1196,6 +1196,25 @@ Localize_or_Replace_Dedicated_TNs(void)
 	// are not recorded as such in isa_properties.cxx.  Bug 6866.
 	if ( tn == OP_result(op,0) )
 	  continue;
+#endif
+#ifdef ABSOFT_EXTENSIONS
+	if( non_region_def_bb == NULL &&
+	    srid == NULL ){
+	    // check if this tn has been redefined in this block
+	    OP* cur_op;
+	    TN* cur_tn;
+	    FOR_ALL_BB_OPs (bb, cur_op) {
+	    	if( cur_op == op ) break; // reach this op, stop
+		for (INT i = 0; i < OP_results(cur_op); i++) {
+   		   cur_tn = OP_result(cur_op,i);
+		   if( cur_tn == tn ){
+		   	// redefined
+			non_region_def_bb = bb;
+			break;
+		   }
+		}
+	    }
+	}
 #endif
 	if ( non_region_def_bb == bb ) // the def is already local
 	  continue;

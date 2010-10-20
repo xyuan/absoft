@@ -42,8 +42,8 @@
  * ====================================================================
  *
  * Module: cwh_stmt
- * $Revision: 2867 $
- * $Date: 2008-07-16 09:34:15 -0400 (Wed, 16 Jul 2008) $
+ * $Revision: 3145 $
+ * $Date: 2010-01-07 08:42:28 -0500 (Thu, 07 Jan 2010) $
  * $Author: yin $
  *
  * Revision history:
@@ -165,6 +165,11 @@ fei_stmt(INT32  lineno,
 
   if (lineno) {
 
+#ifdef ABSOFT_EXTENSIONS
+    if( stmt_character_flag & ( 0x1 << FEI_STMT_INTERNAL) ){
+	// ignore its line_number
+    }else
+#endif
     cwh_stmt_init_srcpos(lineno);
 
     /* Insert any deferred statements */

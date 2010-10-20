@@ -48,8 +48,8 @@
 /* ====================================================================
  * ====================================================================
  *
- * $Revision: 3020 $
- * $Date: 2009-05-08 15:35:52 -0400 (Fri, 08 May 2009) $
+ * $Revision: 3085 $
+ * $Date: 2009-09-29 11:38:00 -0400 (Tue, 29 Sep 2009) $
  * $Author: yin $
  * $Source$
  *
@@ -895,6 +895,10 @@ Add_Object_To_Frame_Segment ( ST *sym, SF_SEGMENT seg, BOOL allocate )
 static UINT32 *arg_area_size_array;
 static INT max_arg_area_size_index = 0;
 
+#ifdef TARG_X64
+static UINT32 *arg_area_size_array_init;
+#endif
+
 // initialize and possibly realloc the arg-area-size array.
 static void
 Init_PU_arg_area_size_array (void)
@@ -904,6 +908,10 @@ Init_PU_arg_area_size_array (void)
 		max_arg_area_size_index = num_pus;
 		arg_area_size_array = (UINT32*) Src_Alloc (
 			sizeof(UINT32) * (max_arg_area_size_index+1));
+#ifdef TARG_X64
+		arg_area_size_array_init = (UINT32*) Src_Alloc (
+			sizeof(UINT32) * (max_arg_area_size_index+1));
+#endif			
 	}
 	else if (num_pus >= max_arg_area_size_index) {
 		// realloc space
@@ -913,6 +921,13 @@ Init_PU_arg_area_size_array (void)
 			arg_area_size_array,
 			max_arg_area_size_index,
 			num_pus);
+#ifdef TARG_X64
+		arg_area_size_array_init = TYPE_MEM_POOL_REALLOC_N (
+			UINT32, &MEM_src_pool, 
+			arg_area_size_array_init,
+			max_arg_area_size_index,
+			num_pus);
+#endif			
                 max_arg_area_size_index = num_pus;
 	}
 }
@@ -942,7 +957,21 @@ Set_PU_arg_area_size (TY_IDX pu, UINT32 size)
   }
   Is_True(index < max_arg_area_size_index, ("Set_PU_arg_area_size still overflows?"));
   arg_area_size_array[index] = size;
+#ifdef TARG_X64
+  arg_area_size_array_init[index] = TRUE;
+#endif  
 }
+
+#ifdef TARG_X64
+BOOL
+Is_PU_arg_area_size_inited(TY_IDX pu)
+{
+  Is_True(TY_kind(pu) == KIND_FUNCTION, ("Get_PU_arg_area_size of non-pu"));	
+  INT index = TY_id(pu);
+  
+  return (arg_area_size_array_init[index] == TRUE);
+}
+#endif
 
 // return ST for __return_address if one exists
 

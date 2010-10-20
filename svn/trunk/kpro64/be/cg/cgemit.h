@@ -42,7 +42,7 @@
 #define cgemit_INCLUDED
 
 #ifdef _KEEP_RCS_ID
-static char *cgemit_rcs_id = "$Source$ $Revision: 2492 $";
+static char *cgemit_rcs_id = "$Source$ $Revision: 3069 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "dwarf_DST_mem.h"
@@ -94,6 +94,7 @@ extern UINT64 PC;
 extern UINT64 PC_Incr(UINT64 pc);
 extern UINT64 PCs_Incr(UINT64 pc, UINT32 n);
 extern UINT64 PC_Incr_N(UINT64 pc, UINT32 incr);
+extern BOOL CG_emit_dwarf_loc;
 #endif
 
 #endif /* cgemit_INCLUDED */

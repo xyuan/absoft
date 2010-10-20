@@ -33,7 +33,7 @@
 #
 #
 
-#ident "$Revision: 2718 $"
+#ident "$Revision: 3188 $"
 # 
 # This file has been heavily hacked for building on Linux
 #
@@ -111,8 +111,7 @@ else
 endif
 else
 ifeq ($(APPLE), 1)
-	F90 = ifort -m32
-	IFORT = 1
+	F90 = af90 -m32
 else
 	F90 = pathf90 -march=anyx86
 endif

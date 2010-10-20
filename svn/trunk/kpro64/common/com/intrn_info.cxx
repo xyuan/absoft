@@ -199,10 +199,10 @@ const intrn_info_t intrn_info[INTRINSIC_LAST+1] = {
 	IRETURN_F8, NULL, "DMOD", "_absoft_I_dmod"},
   { /* FQMOD */
 	BYVAL, PURE, NO_SIDEEFFECTS, DOES_RETURN, NOT_ACTUAL, NOT_CGINTRINSIC,
-	IRETURN_FQ, NULL, "QMOD", "_absoft_qmodr"},
+	IRETURN_FQ, NULL, "QMOD", "_absoft_fmodl"},
   { /* FQMODe */
 	NOT_BYVAL, PURE, NO_SIDEEFFECTS, DOES_RETURN, ACTUAL, NOT_CGINTRINSIC,
-	IRETURN_FQ, NULL, "QMOD", "_absoft_I_qmodr"},
+	IRETURN_FQ, NULL, "QMOD", "_absoft_I_fmodl"},
   { /* F4SQRTe */
 	NOT_BYVAL, PURE, NO_SIDEEFFECTS, DOES_RETURN, ACTUAL, NOT_CGINTRINSIC,
 	IRETURN_F4, NULL, "SQRT", "_absoft_I_sqrt"},

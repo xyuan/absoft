@@ -32,6 +32,7 @@
               use omp_lib_kinds
               integer (kind=omp_nest_lock_kind), intent(inout) :: var
             end subroutine omp_destroy_nest_lock
+!DIR$ NAME(omp_destroy_nest_lock = "_ABSOFT_F_omp_destroy_nest_lock")
           end interface
 
           interface
@@ -102,6 +103,7 @@
               use omp_lib_kinds
               integer (kind=omp_nest_lock_kind), intent(out) :: var
             end subroutine omp_init_nest_lock
+!DIR$ NAME(omp_init_nest_lock = "_ABSOFT_F_omp_init_nest_lock")
           end interface
 
           interface
@@ -130,6 +132,7 @@
               use omp_lib_kinds
               integer (kind=omp_nest_lock_kind), intent(inout) :: var
             end subroutine omp_set_nest_lock
+!DIR$ NAME(omp_set_nest_lock = "_ABSOFT_F_omp_set_nest_lock")
           end interface
 
           interface
@@ -160,6 +163,7 @@
               integer (kind=omp_integer_kind) :: omp_test_nest_lock
               integer (kind=omp_nest_lock_kind), intent(inout) :: var
             end function omp_test_nest_lock
+!DIR$ NAME(omp_test_nest_lock = "_ABSOFT_F_omp_test_nest_lock")
           end interface
 
           interface
@@ -174,5 +178,6 @@
               use omp_lib_kinds
               integer (kind=omp_nest_lock_kind), intent(inout) :: var
             end subroutine omp_unset_nest_lock
+!DIR$ NAME(omp_unset_nest_lock = "_ABSOFT_F_omp_unset_nest_lock")
           end interface
         end module omp_lib

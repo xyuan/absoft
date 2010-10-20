@@ -52,7 +52,7 @@
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
-static char *rcs_id = "$Source: be/lno/SCCS/s.simd.cxx $ $Revision: 3044 $";
+static char *rcs_id = "$Source: be/lno/SCCS/s.simd.cxx $ $Revision: 3154 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "defs.h"
@@ -1497,15 +1497,19 @@ BOOL Is_Vectorizable_Intrinsic (WN *wn)
   case INTRN_F8LOG:
   case INTRN_F8SIN:
   case INTRN_F8COS:
-  case INTRN_F4EXPEXPR:
-  case INTRN_F8EXPEXPR:
 #ifdef ABSOFT_EXTENSIONS
   case INTRN_F4SIN:
   case INTRN_F4COS:
 //  case INTRN_F4LOG10:
 #endif
+  case INTRN_F4EXPEXPR:
+#ifndef ABSOFT_EXTENSIONS
+  // not in acml, also add SINCOS/SINCOSF
+  // TODO: add in library
+  case INTRN_F8EXPEXPR:
   case INTRN_F8SINH:
   case INTRN_F8COSH:
+#endif
   case INTRN_F8LOG10:
     return TRUE;
   default:
