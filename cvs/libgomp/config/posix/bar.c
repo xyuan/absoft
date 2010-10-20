@@ -115,9 +115,15 @@ gomp_team_barrier_wait_end (gomp_barrier_t *bar, gomp_barrier_state_t state)
 
   if (state & 1)
     {
+#ifndef MSVC
+      /* c grammer */
       n = --bar->arrived;
+#endif      
       struct gomp_thread *thr = gomp_thread ();
       struct gomp_team *team = thr->ts.team;
+#ifdef MSVC
+      n = --bar->arrived;
+#endif     
 
       if (team->task_count)
 	{

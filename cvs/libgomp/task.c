@@ -57,7 +57,11 @@ gomp_end_task (void)
   thr->task = task->parent;
 }
 
-static inline void
+static
+#ifndef MSVC
+inline 
+#endif
+void
 gomp_clear_parent (struct gomp_task *children)
 {
   struct gomp_task *task = children;
@@ -78,7 +82,11 @@ gomp_clear_parent (struct gomp_task *children)
 void
 GOMP_task (void (*fn) (void *), void *data, void (*cpyfn) (void *, void *),
 	   long arg_size, long arg_align, bool if_clause,
-	   unsigned flags __attribute__((unused)))
+	   unsigned flags 
+#ifndef MSVC	   
+	   __attribute__((unused))
+#endif	   
+	   )
 {
   struct gomp_thread *thr = gomp_thread ();
   struct gomp_team *team = thr->ts.team;
@@ -106,11 +114,23 @@ GOMP_task (void (*fn) (void *), void *data, void (*cpyfn) (void *, void *),
       thr->task = &task;
       if (__builtin_expect (cpyfn != NULL, 0))
 	{
+#ifdef MSVC	
+	  char *buf;
+	  char *arg = (char *) (((uintptr_t) buf + arg_align - 1)
+				& ~(uintptr_t) (arg_align - 1));
+				
+	  buf = (char*) malloc( arg_size + arg_align - 1 );				
+	  cpyfn (arg, data);
+	  fn (arg);
+	  
+	  free( buf );
+#else		
 	  char buf[arg_size + arg_align - 1];
 	  char *arg = (char *) (((uintptr_t) buf + arg_align - 1)
 				& ~(uintptr_t) (arg_align - 1));
 	  cpyfn (arg, data);
 	  fn (arg);
+#endif	  
 	}
       else
 	fn (data);

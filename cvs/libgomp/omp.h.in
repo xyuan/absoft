@@ -52,12 +52,18 @@ typedef enum omp_sched_t
   omp_sched_auto = 4
 } omp_sched_t;
 
+
 #ifdef __cplusplus
 extern "C" {
 # define __GOMP_NOTHROW throw ()
 #else
+#ifndef MSVC
 # define __GOMP_NOTHROW __attribute__((__nothrow__))
+#else
+# define __GOMP_NOTHROW
 #endif
+#endif
+
 
 extern void omp_set_num_threads (int) __GOMP_NOTHROW;
 extern int omp_get_num_threads (void) __GOMP_NOTHROW;

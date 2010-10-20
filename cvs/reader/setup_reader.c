@@ -1628,11 +1628,11 @@ int setStrVar(char *label, char *out)
 	} else
 	    RHS[j++] = inLine[i];
   }
-  RHS[j] = '\0';
+  RHS[j++] = '\0';
 //    trim(RHS);
 
   int err = checkLabel(label, LHS);
-  strcpy(out, RHS);
+  memcpy(out, RHS, j);
 //    trim(out);
   return err;
 }

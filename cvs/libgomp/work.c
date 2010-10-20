@@ -95,11 +95,16 @@ gomp_init_work_share (struct gomp_work_share *ws, bool ordered,
   gomp_mutex_init (&ws->lock);
   if (__builtin_expect (ordered, 0))
     {
+#ifdef MSVC
+/* under linux, inline_ordered_team_ids[0] can give the correct size 
+   under windows, it doesn't work, so always alloc new space */
+#define INLINE_ORDERED_TEAM_IDS_CNT 0
+#else    
 #define INLINE_ORDERED_TEAM_IDS_CNT \
   ((sizeof (struct gomp_work_share) \
     - offsetof (struct gomp_work_share, inline_ordered_team_ids)) \
    / sizeof (((struct gomp_work_share *) 0)->inline_ordered_team_ids[0]))
-
+#endif
       if (nthreads > INLINE_ORDERED_TEAM_IDS_CNT)
 	ws->ordered_team_ids
 	  = gomp_malloc (nthreads * sizeof (*ws->ordered_team_ids));
@@ -132,7 +137,11 @@ gomp_fini_work_share (struct gomp_work_share *ws)
 /* Free a work share struct, if not orphaned, put it into current
    team's free gomp_work_share cache.  */
 
-static inline void
+static 
+#ifndef MSVC
+inline 
+#endif
+void
 free_work_share (struct gomp_team *team, struct gomp_work_share *ws)
 {
   gomp_fini_work_share (ws);

@@ -32,7 +32,11 @@ typedef unsigned long long gomp_ull;
 
 /* Initialize the given work share construct from the given arguments.  */
 
-static inline void
+static 
+#ifndef MSVC
+inline 
+#endif
+void
 gomp_loop_ull_init (struct gomp_work_share *ws, bool up, gomp_ull start,
 		    gomp_ull end, gomp_ull incr, enum gomp_schedule_type sched,
 		    gomp_ull chunk_size)

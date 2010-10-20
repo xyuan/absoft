@@ -32,9 +32,9 @@ ifndef NOUPDATE
 NOUPDATE=0
 endif
 
-ifeq ($(APPLE),1)
-LDINTELLIBS = /opt/intel/fc/current/lib/libifcore.a /opt/intel/fc/current/lib/libimf.a /opt/intel/fc/current/lib/libirc.a
-endif
+#ifeq ($(APPLE),1)
+#LDINTELLIBS = /opt/intel/fc/current/lib/libifcore.a /opt/intel/fc/current/lib/libimf.a /opt/intel/fc/current/lib/libirc.a
+#endif
 
 ifeq ($(PRODUCTION),1)
 TARGET=atmod

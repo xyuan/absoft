@@ -2,10 +2,10 @@
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
 /* Define to 1 if the target supports __attribute__((alias(...))). */
-#define HAVE_ATTRIBUTE_ALIAS 1
+/*#define HAVE_ATTRIBUTE_ALIAS 1 */
 
 /* Define to 1 if the target supports __attribute__((dllexport)). */
-#define HAVE_ATTRIBUTE_DLLEXPORT 1
+/*#define HAVE_ATTRIBUTE_DLLEXPORT */
 
 /* Define to 1 if the target supports __attribute__((visibility(...))). */
 /* #undef HAVE_ATTRIBUTE_VISIBILITY */

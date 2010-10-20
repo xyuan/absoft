@@ -35,7 +35,7 @@ ifndef NOUPDATE
 NOUPDATE=0
 endif
 ifndef LEOPARD
-LEOPARD=1
+LEOPARD=0
 endif
 
 MAKEFILE = makefile_64.x86-64osx
@@ -69,12 +69,6 @@ VPATH=$(SRC_DIR):
 
 INCLUDES = -I$(SRC_DIR) -I$(IOINC_DIR)
 
-ifeq ($(PRODUCTION), 0)
-CC  = gcc -m64 
-else
-CC  = gcc -m64 
-endif
-
 DEFINES = -DBYTESWAPPED -D_LITTLE_ENDIAN -D_ALCHEMY \
 
 CFLAGS = $(OPTIMIZE) \
@@ -82,9 +76,13 @@ CFLAGS = $(OPTIMIZE) \
 	 $(INCLUDES)  
 
 ifeq ($(LEOPARD), 0)
+CC  = gcc-4.0 -m64
+CXX = g++-4.0 -m64
 ENVP=MACOSX_DEPLOYMENT_TARGET=10.4
 SDK=/Developer/SDKs/MacOSX10.4u.sdk
 else
+CC  = gcc -m64
+CXX = g++ -m64
 ENVP=MACOSX_DEPLOYMENT_TARGET=10.5
 SDK=/Developer/SDKs/MacOSX10.5.sdk
 endif
@@ -134,7 +132,7 @@ $(LIB):	$(ALL_OBJ)
 	cp $(LIB) $(ABSOFT)/lib64
 
 $(SHLIB):	$(ALL_OBJ)
-	${ENVP} g++ -m64 -dynamic -dynanmiclib -undefined dynamic_lookup -o $(SHLIB) $(ALL_OBJ)
+	${ENVP} $(CXX) -m64 -dynamic -dynamiclib  -undefined dynamic_lookup -o $(SHLIB) $(ALL_OBJ)
 	cp $(SHLIB) $(ABSOFT)/shlib64
 
 .c.o:

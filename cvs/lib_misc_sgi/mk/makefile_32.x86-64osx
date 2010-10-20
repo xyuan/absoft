@@ -34,6 +34,9 @@ endif
 ifndef NOUPDATE
 NOUPDATE=0
 endif
+ifndef LEOPARD
+LEOPARD=0
+endif
 
 MAKEFILE = makefile_32.x86-64osx
 
@@ -66,18 +69,24 @@ VPATH=$(SRC_DIR):
 
 INCLUDES = -I$(SRC_DIR) -I$(IOINC_DIR)
 
-ifeq ($(PRODUCTION), 0)
-CC  = gcc -m32 
-else
-CC  = gcc -m32 
-endif
-
 DEFINES = -DBYTESWAPPED -D_LITTLE_ENDIAN -D_ALCHEMY \
 
 CFLAGS = $(OPTIMIZE) \
 	 $(DEFINES) \
 	 $(INCLUDES)  
-        
+
+ifeq ($(LEOPARD), 0)
+CC = gcc-4.0 -m32
+CXX = g++-4.0 -m32
+ENVP=MACOSX_DEPLOYMENT_TARGET=10.4
+SDK=/Developer/SDKs/MacOSX10.4u.sdk
+else
+CC = gcc -m32
+CXX = g++ -m32
+ENVP=MACOSX_DEPLOYMENT_TARGET=10.5
+SDK=/Developer/SDKs/MacOSX10.5.sdk
+endif
+
 AR = ar
 
 SRC =	concat.c quad.c leadz.c
@@ -119,8 +128,11 @@ $(LIB):	$(ALL_OBJ)
 	cp $(LIB) $(ABSOFT)/lib
 
 $(SHLIB):	$(ALL_OBJ)
-	g++ -dynamic -dynanmiclib -undefined dynamic_lookup -o $(SHLIB) $(ALL_OBJ)
+	${ENVP} $(CXX) -dynamic -dynamiclib  -undefined dynamic_lookup -o $(SHLIB) $(ALL_OBJ)
 	cp $(SHLIB) $(ABSOFT)/shlib
+
+.c.o:
+	${ENVP} $(CC) -c $(CFLAGS) -o $@ $<
 
 # Automatic dependencies
 %.d: %.c

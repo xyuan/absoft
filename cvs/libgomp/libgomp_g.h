@@ -28,7 +28,11 @@
 #ifndef LIBGOMP_G_H 
 #define LIBGOMP_G_H 1
 
+#ifdef MSVC
+#include <msvcbool.h> // bool is char
+#else
 #include <stdbool.h>
+#endif
 
 /* barrier.c */
 

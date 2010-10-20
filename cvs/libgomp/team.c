@@ -43,7 +43,7 @@ __thread struct gomp_thread gomp_tls_data;
 #ifdef ABSOFT_EXTENSIONS
 struct gomp_thread *GOMP_get_thread (void)
 {
-  return &gomp_tls_data;
+  return (struct gomp_thread *) &gomp_tls_data;
 }
 #endif
 
@@ -53,12 +53,11 @@ pthread_key_t gomp_tls_key;
 #ifdef ABSOFT_EXTENSIONS
 struct gomp_thread *GOMP_get_thread (void)
 {
-  return pthread_getspecific (gomp_tls_key);
+  return (struct gomp_thread *)pthread_getspecific (gomp_tls_key);
 }
 #endif
 
 #endif
-
 
 /* This structure is used to communicate across pthread_create.  */
 
@@ -79,7 +78,11 @@ struct gomp_thread_start_data
 static void *
 gomp_thread_start (void *xdata)
 {
-  struct gomp_thread_start_data *data = xdata;
+  struct gomp_thread_start_data *data = 
+#ifdef MSVC
+  (struct gomp_thread_start_data *)
+#endif  
+  xdata;
   struct gomp_thread *thr;
   struct gomp_thread_pool *pool;
   void (*local_fn) (void *);
@@ -157,7 +160,11 @@ gomp_new_team (unsigned nthreads)
 
   size = sizeof (*team) + nthreads * (sizeof (team->ordered_release[0])
 				      + sizeof (team->implicit_task[0]));
-  team = gomp_malloc (size);
+  team = 
+#ifdef MSVC
+  (struct gomp_team *)
+#endif  
+  gomp_malloc (size);
 
   team->work_share_chunk = 8;
 #ifdef HAVE_SYNC_BUILTINS
@@ -177,7 +184,13 @@ gomp_new_team (unsigned nthreads)
   gomp_barrier_init (&team->barrier, nthreads);
 
   gomp_sem_init (&team->master_release, 0);
-  team->ordered_release = (void *) &team->implicit_task[nthreads];
+  team->ordered_release = 
+#ifdef MSVC
+  (gomp_sem_t **)
+#else  
+  (void *)
+#endif  
+   &team->implicit_task[nthreads];
   team->ordered_release[0] = &team->master_release;
 
   gomp_mutex_init (&team->task_lock);
@@ -204,7 +217,11 @@ free_team (struct gomp_team *team)
 static struct gomp_thread_pool *gomp_new_thread_pool (void)
 {
   struct gomp_thread_pool *pool
-    = gomp_malloc (sizeof(struct gomp_thread_pool));
+    = 
+#ifdef MSVC
+  (struct gomp_thread_pool *)
+#endif    
+    gomp_malloc (sizeof(struct gomp_thread_pool));
   pool->threads = NULL;
   pool->threads_size = 0;
   pool->threads_used = 0;
@@ -225,9 +242,17 @@ gomp_free_pool_helper (void *thread_pool)
 /* Free a thread pool and release its threads. */
 
 static void
-gomp_free_thread (void *arg __attribute__((unused)))
+gomp_free_thread (void *arg
+#ifndef MSVC
+ __attribute__((unused))
+#endif 
+ )
 {
-  struct gomp_thread *thr = gomp_thread ();
+  struct gomp_thread *thr = 
+#ifdef MSVC
+  (struct gomp_thread *)
+#endif  
+  gomp_thread ();
   struct gomp_thread_pool *pool = thr->thread_pool;
   if (pool)
     {
@@ -240,11 +265,18 @@ gomp_free_thread (void *arg __attribute__((unused)))
 	      nthr->fn = gomp_free_pool_helper;
 	      nthr->data = pool;
 	    }
+#ifndef MSVC	    
+/* Under linux, gomp_free_thread is not called because 
+   the key is destroyed before calling this function.
+   However, under windows implementation. This function is called
+   And only one thread will call this function -- Yin Ma*/
+   
 	  /* This barrier undocks threads docked on pool->threads_dock.  */
 	  gomp_barrier_wait (&pool->threads_dock);
 	  /* And this waits till all threads have called gomp_barrier_wait_last
 	     in gomp_free_pool_helper.  */
 	  gomp_barrier_wait (&pool->threads_dock);
+#endif	  
 	  /* Now it is safe to destroy the barrier and free the pool.  */
 	  gomp_barrier_destroy (&pool->threads_dock);
 	}
@@ -372,8 +404,12 @@ gomp_team_start (void (*fn) (void *), void *data, unsigned nthreads,
       if (nthreads >= pool->threads_size)
 	{
 	  pool->threads_size = nthreads + 1;
-	  pool->threads
-	    = gomp_realloc (pool->threads,
+	  pool->threads 
+	    = 
+#ifdef MSVC
+	    (struct gomp_thread **)
+#endif		    
+	    gomp_realloc (pool->threads,
 			    pool->threads_size
 			    * sizeof (struct gomp_thread_data *));
 	}
@@ -406,7 +442,11 @@ gomp_team_start (void (*fn) (void *), void *data, unsigned nthreads,
       attr = &thread_attr;
     }
 
-  start_data = gomp_alloca (sizeof (struct gomp_thread_start_data)
+  start_data = 
+#ifdef MSVC
+  (struct gomp_thread_start_data *)
+#endif  
+  gomp_alloca (sizeof (struct gomp_thread_start_data)
 			    * (nthreads-i));
 
   /* Launch new threads.  */
@@ -525,10 +565,12 @@ gomp_team_end (void)
     }
 }
 
-
 /* Constructors for this file.  */
 
-static void __attribute__((constructor))
+static void 
+#ifndef MSVC
+__attribute__((constructor))
+#endif
 initialize_team (void)
 {
   struct gomp_thread *thr;
@@ -551,7 +593,11 @@ initialize_team (void)
   gomp_sem_init (&thr->release, 0);
 }
 
-static void __attribute__((destructor))
+
+static void 
+#ifndef MSVC
+__attribute__((destructor))
+#endif
 team_destructor (void)
 {
   /* Without this dlclose on libgomp could lead to subsequent
@@ -559,13 +605,33 @@ team_destructor (void)
   pthread_key_delete (gomp_thread_destructor);
 }
 
+#ifdef MSVC
+class INIT_TEAM
+{
+public:
+    INIT_TEAM(){
+    	initialize_team();
+    };
+    ~INIT_TEAM(){
+    	team_destructor();
+    };   
+};
+/* Global constructor */
+INIT_TEAM init_team;
+#endif
+
 struct gomp_task_icv *
 gomp_new_icv (void)
 {
   struct gomp_thread *thr = gomp_thread ();
-  struct gomp_task *task = gomp_malloc (sizeof (struct gomp_task));
+  struct gomp_task *task = 
+#ifdef MSVC
+  (struct gomp_task *)
+#endif  
+  gomp_malloc (sizeof (struct gomp_task));
   gomp_init_task (task, NULL, &gomp_global_icv);
   thr->task = task;
   pthread_setspecific (gomp_thread_destructor, thr);
   return &task->icv;
 }
+

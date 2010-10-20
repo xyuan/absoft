@@ -15,7 +15,7 @@ VPATH = $(SRC_PATH)
 
 INCLUDE_PATH = -I./gcc -I. -I./config/posix -I./include -I./x86
 
-CFLAGS = -DHAVE_CONFIG_H $(DEBUG_CFLAGS)
+CFLAGS = -DHAVE_CONFIG_H 
 CFLAGS += $(INCLUDE_PATH)
 CC = cl /nologo 
 
@@ -23,20 +23,24 @@ LIBNAME = libgomp_s.lib
 DLLNAME = libgompx64.dll
 LINKER = /cygdrive/c/Absoft10/bin/link.exe
 OBJS = alloc.obj barrier.obj critical_wrap.obj env_wrap.obj error.obj \
-	iter.obj loop.obj ordered.obj parallel.obj omp_aux.obj\
-	sections.obj single.obj team_wrap.obj work.obj lock.obj \
+	iter.obj loop.obj ordered.obj parallel.obj omp_aux.obj loop_ull.obj\
+	sections.obj single.obj team_wrap.obj work.obj lock.obj task.obj\
+	affinity.obj iter_ull.obj bar.obj\
 	mutex.obj proc.obj sem.obj bar.obj time.obj fortran.obj
 LIBLINK = lib
-LINKFLAGS = /machine:X64
+LINKFLAGS = /machine:X64 
 MODE = #-m32
-
+	
 %.obj: %.c
-	$(CC) $(MODE) $(CFLAGS) /c $< /Fo$(BUILDDIR)/$@ 
+	$(CC) $(MODE) $(CFLAGS) $(DEBUG_CFLAGS) /c $< /Fo$(BUILDDIR)/$@ 
 	
 %.obj: %.cpp
-	$(CC) $(MODE) $(CFLAGS) /c $< /Fo$(BUILDDIR)/$@ 
+	$(CC) $(MODE) $(CFLAGS) $(DEBUG_CFLAGS) /c $< /Fo$(BUILDDIR)/$@ 
 
 all: $(BUILDDIR) $(LIBNAME) 
+
+team_wrap.obj: team_wrap.cpp
+	$(CC) $(MODE) $(CFLAGS) /w /c $< /Fo$(BUILDDIR)/$@	
 
 $(BUILDDIR):
 	mkdir $(BUILDDIR)
@@ -44,7 +48,7 @@ $(BUILDDIR):
 $(LIBNAME): $(OBJS)
 	cd $(BUILDDIR); \
 	$(LIBLINK) $(LINKFLAGS) /out:$(LIBNAME) $^; \
-	$(LINKER) $(LINKFLAGS) /DLL /out:$(DLLNAME) /def:../x86/gomp.def /implib:libgomp.lib ../x64/libpthread.lib Advapi32.lib $^ 
+	$(LINKER) /RELEASE /DEBUG /PDB:libgompx64.pdb $(LINKFLAGS) /DLL /out:$(DLLNAME) /def:../x86/gomp.def /implib:libgomp.lib ../x64/libpthread.lib Advapi32.lib $^ 
 
 clean:
 	rm -rf $(BUILDDIR)

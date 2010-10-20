@@ -34,11 +34,34 @@
 #ifndef LIBGOMP_H 
 #define LIBGOMP_H 1
 
+#define ABSOFT_EXTENSIONS 
+
+#ifdef ABSOFT_EXTENSIONS
+
+#ifdef _MSC_VER
+#define MSVC
+
+#define __builtin_expect(x,y) x
+#define strncasecmp _strnicmp
+
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#endif
+
 #include "config.h"
 #include "gstdint.h"
 
 #include <pthread.h>
+
+#ifdef MSVC
+#include <msvcbool.h> // bool is char
+#else
 #include <stdbool.h>
+#endif
 
 #ifdef HAVE_ATTRIBUTE_VISIBILITY
 # pragma GCC visibility push(hidden)
@@ -48,8 +71,6 @@
 #include "mutex.h"
 #include "bar.h"
 #include "ptrlock.h"
-
-#define ABSOFT_EXTENSIONS 
 
 /* This structure contains the data to control one work-sharing construct,
    either a LOOP (FOR/DO) or a SECTIONS.  */
@@ -129,8 +150,12 @@ struct gomp_work_share
      are in a different cache line.  */
 
   /* This lock protects the update of the following members.  */
-  gomp_mutex_t lock __attribute__((aligned (64)));
-
+  gomp_mutex_t lock 
+#ifndef MSVC
+  __attribute__((aligned (64)))
+#endif
+  ;
+  
   /* This is the count of the number of threads that have exited the work
      share construct.  If the construct was marked nowait, they have moved on
      to other work; otherwise they're blocked on a barrier.  The last member
@@ -161,7 +186,11 @@ struct gomp_work_share
 
   /* If only few threads are in the team, ordered_team_ids can point
      to this array which fills the padding at the end of this struct.  */
+#ifndef MSVC     
   unsigned inline_ordered_team_ids[0];
+#else
+  unsigned *inline_ordered_team_ids;
+#endif  
 };
 
 /* This structure contains all of the thread-local data associated with 
@@ -375,9 +404,17 @@ static inline struct gomp_thread *gomp_thread (void)
 }
 #else
 extern pthread_key_t gomp_tls_key;
-static inline struct gomp_thread *gomp_thread (void)
+static 
+#ifndef MSVC
+inline 
+#endif
+struct gomp_thread *gomp_thread (void)
 {
-  return pthread_getspecific (gomp_tls_key);
+  return 
+#ifdef MSVC
+  (struct gomp_thread *)
+#endif  
+  pthread_getspecific (gomp_tls_key);
 }
 #endif
 
@@ -385,7 +422,11 @@ extern struct gomp_task_icv *gomp_new_icv (void);
 
 /* Here's how to access the current copy of the ICVs.  */
 
-static inline struct gomp_task_icv *gomp_icv (bool write)
+static 
+#ifndef MSVC
+inline 
+#endif
+struct gomp_task_icv *gomp_icv (bool write)
 {
   struct gomp_task *task = gomp_thread ()->task;
   if (task)
@@ -413,20 +454,38 @@ extern void gomp_init_thread_affinity (pthread_attr_t *);
 
 /* alloc.c */
 
-extern void *gomp_malloc (size_t) __attribute__((malloc));
-extern void *gomp_malloc_cleared (size_t) __attribute__((malloc));
+extern void *gomp_malloc (size_t) 
+#ifndef MSVC
+__attribute__((malloc))
+#endif
+;
+extern void *gomp_malloc_cleared (size_t)
+#ifndef MSVC
+__attribute__((malloc))
+#endif
+;
 extern void *gomp_realloc (void *, size_t);
 
 /* Avoid conflicting prototypes of alloca() in system headers by using
    GCC's builtin alloca().  */
+#ifndef MSVC
 #define gomp_alloca(x)  __builtin_alloca(x)
+#else
+#define gomp_alloca(x)  alloca(x)
+#endif
 
 /* error.c */
 
 extern void gomp_error (const char *, ...)
-	__attribute__((format (printf, 1, 2)));
+#ifndef MSVC
+	__attribute__((format (printf, 1, 2)))
+#endif	
+	;
 extern void gomp_fatal (const char *, ...)
-	__attribute__((noreturn, format (printf, 1, 2)));
+#ifndef MSVC
+	__attribute__((noreturn, format (printf, 1, 2)))
+#endif	
+	;
 
 /* iter.c */
 
@@ -480,7 +539,10 @@ extern void gomp_init_task (struct gomp_task *, struct gomp_task *,
 extern void gomp_end_task (void);
 extern void gomp_barrier_handle_tasks (gomp_barrier_state_t);
 
-static void inline
+static void 
+#ifndef MSVC
+inline
+#endif
 gomp_finish_task (struct gomp_task *task)
 {
   gomp_sem_destroy (&task->taskwait_sem);
@@ -501,7 +563,11 @@ extern bool gomp_work_share_start (bool);
 extern void gomp_work_share_end (void);
 extern void gomp_work_share_end_nowait (void);
 
-static inline void
+static 
+#ifndef MSVC
+inline 
+#endif
+void
 gomp_work_share_init_done (void)
 {
   struct gomp_thread *thr = gomp_thread ();
@@ -517,6 +583,7 @@ gomp_work_share_init_done (void)
 #include "libgomp_g.h"
 
 #ifdef ABSOFT_EXTENSIONS
+
 extern struct gomp_thread * GOMP_get_thread (void);
 extern void AOMP_loop_static_init(long start, long end, long incr, long chunk_size);
 extern void AOMP_loop_dynamic_init (long start, long end, long incr, long chunk_size);
@@ -526,6 +593,7 @@ extern void AOMP_loop_ordered_static_init (long start, long end, long incr, long
 extern void AOMP_loop_ordered_dynamic_init (long start, long end, long incr, long chunk_size);
 extern void AOMP_loop_ordered_guided_init (long start, long end, long incr, long chunk_size);
 extern void AOMP_loop_ordered_runtime_init (long start, long end, long incr);
+
 #endif
 
 /* Include omp.h by parts.  */
@@ -593,6 +661,12 @@ extern int gomp_test_nest_lock_25 (omp_nest_lock_25_t *) __GOMP_NOTHROW;
     __attribute__ ((alias (#fn))) attribute_hidden;
 #else
 # define ialias(fn)
+#endif
+
+#ifdef ABSOFT_EXTENSIONS
+#ifdef __cplusplus
+}
+#endif
 #endif
 
 #endif /* LIBGOMP_H */

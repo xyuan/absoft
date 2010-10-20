@@ -45,6 +45,10 @@
 double
 omp_get_wtime (void)
 {
+#ifdef MSVC
+/* ABSOFT_EXTENSIONS */
+  return (double) clock() / CLOCKS_PER_SEC; 
+#else
 #ifdef HAVE_CLOCK_GETTIME
   struct timespec ts;
 # ifdef CLOCK_MONOTONIC
@@ -57,11 +61,16 @@ omp_get_wtime (void)
   gettimeofday (&tv, NULL);
   return tv.tv_sec + tv.tv_usec / 1e6;
 #endif
+#endif
 }
 
 double
 omp_get_wtick (void)
 {
+#ifdef MSVC
+/* ABSOFT_EXTENSIONS */
+  return 1.0 / CLOCKS_PER_SEC; 
+#else
 #ifdef HAVE_CLOCK_GETTIME
   struct timespec ts;
 # ifdef CLOCK_MONOTONIC
@@ -71,6 +80,7 @@ omp_get_wtick (void)
   return ts.tv_sec + ts.tv_nsec / 1e9;
 #else
   return 1.0 / sysconf(_SC_CLK_TCK);
+#endif
 #endif
 }
 

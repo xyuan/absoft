@@ -34,22 +34,38 @@ typedef pthread_mutex_t gomp_mutex_t;
 
 #define GOMP_MUTEX_INIT_0 0
 
-static inline void gomp_mutex_init (gomp_mutex_t *mutex)
+static 
+#ifndef MSVC
+inline 
+#endif
+void gomp_mutex_init (gomp_mutex_t *mutex)
 {
   pthread_mutex_init (mutex, NULL);
 }
 
-static inline void gomp_mutex_lock (gomp_mutex_t *mutex)
+static 
+#ifndef MSVC
+inline
+#endif
+void gomp_mutex_lock (gomp_mutex_t *mutex)
 {
   pthread_mutex_lock (mutex);
 }
 
-static inline void gomp_mutex_unlock (gomp_mutex_t *mutex)
+static 
+#ifndef MSVC
+inline 
+#endif
+void gomp_mutex_unlock (gomp_mutex_t *mutex)
 {
    pthread_mutex_unlock (mutex);
 }
 
-static inline void gomp_mutex_destroy (gomp_mutex_t *mutex)
+static 
+#ifndef MSVC
+inline 
+#endif
+void gomp_mutex_destroy (gomp_mutex_t *mutex)
 {
   pthread_mutex_destroy (mutex);
 }

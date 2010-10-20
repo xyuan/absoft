@@ -29,7 +29,11 @@
 
 /* Initialize the given work share construct from the given arguments.  */
 
-static inline void
+static 
+#ifndef MSVC
+inline 
+#endif
+void
 gomp_sections_init (struct gomp_work_share *ws, unsigned count)
 {
   ws->sched = GFS_DYNAMIC;

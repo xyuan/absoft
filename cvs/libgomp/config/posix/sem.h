@@ -67,19 +67,31 @@ extern void gomp_sem_destroy (gomp_sem_t *sem);
 
 typedef sem_t gomp_sem_t;
 
-static inline void gomp_sem_init (gomp_sem_t *sem, int value)
+static 
+#ifndef MSVC
+inline 
+#endif
+void gomp_sem_init (gomp_sem_t *sem, int value)
 {
   sem_init (sem, 0, value);
 }
 
 extern void gomp_sem_wait (gomp_sem_t *sem);
 
-static inline void gomp_sem_post (gomp_sem_t *sem)
+static 
+#ifndef MSVC
+inline 
+#endif
+void gomp_sem_post (gomp_sem_t *sem)
 {
   sem_post (sem);
 }
 
-static inline void gomp_sem_destroy (gomp_sem_t *sem)
+static 
+#ifndef MSVC
+inline 
+#endif
+void gomp_sem_destroy (gomp_sem_t *sem)
 {
   sem_destroy (sem);
 }

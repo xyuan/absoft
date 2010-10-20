@@ -1365,4 +1365,12 @@ PTW32_DLLPORT DWORD PTW32_CDECL ptw32_get_exception_services_code(void);
 
 #endif /* ! RC_INVOKED */
 
+#define ABSOFT_EXTENSIONS
+
+#ifdef ABSOFT_EXTENSIONS
+#ifdef _MSC_VER
+#define MSVC
+#endif
+#endif
+
 #endif /* PTHREAD_H */

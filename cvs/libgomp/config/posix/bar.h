@@ -57,7 +57,11 @@ extern void gomp_team_barrier_wait_end (gomp_barrier_t *,
 					gomp_barrier_state_t);
 extern void gomp_team_barrier_wake (gomp_barrier_t *, int);
 
-static inline gomp_barrier_state_t
+static 
+#ifndef MSVC
+inline 
+#endif
+gomp_barrier_state_t
 gomp_barrier_wait_start (gomp_barrier_t *bar)
 {
   unsigned int ret;
@@ -67,13 +71,21 @@ gomp_barrier_wait_start (gomp_barrier_t *bar)
   return ret;
 }
 
-static inline bool
+static 
+#ifndef MSVC
+inline 
+#endif
+bool
 gomp_barrier_last_thread (gomp_barrier_state_t state)
 {
   return state & 1;
 }
 
-static inline void
+static 
+#ifndef MSVC
+inline 
+#endif
+void
 gomp_barrier_wait_last (gomp_barrier_t *bar)
 {
   gomp_barrier_wait (bar);
@@ -82,31 +94,51 @@ gomp_barrier_wait_last (gomp_barrier_t *bar)
 /* All the inlines below must be called with team->task_lock
    held.  */
 
-static inline void
+static
+#ifndef MSVC
+inline
+#endif
+void
 gomp_team_barrier_set_task_pending (gomp_barrier_t *bar)
 {
   bar->generation |= 1;
 }
 
-static inline void
+static 
+#ifndef MSVC
+inline 
+#endif
+void
 gomp_team_barrier_clear_task_pending (gomp_barrier_t *bar)
 {
   bar->generation &= ~1;
 }
 
-static inline void
+static 
+#ifndef MSVC
+inline 
+#endif
+void
 gomp_team_barrier_set_waiting_for_tasks (gomp_barrier_t *bar)
 {
   bar->generation |= 2;
 }
 
-static inline bool
+static
+#ifndef MSVC
+inline
+#endif
+bool
 gomp_team_barrier_waiting_for_tasks (gomp_barrier_t *bar)
 {
   return (bar->generation & 2) != 0;
 }
 
-static inline void
+static 
+#ifndef MSVC
+inline
+#endif
+void
 gomp_team_barrier_done (gomp_barrier_t *bar, gomp_barrier_state_t state)
 {
   bar->generation = (state & ~3) + 4;

@@ -23,10 +23,13 @@
    <http://www.gnu.org/licenses/>.  */
 
 /* This file handles the CRITICAL construct.  */
-
 #include "libgomp.h"
 #include <stdlib.h>
 
+#ifdef MSVC
+#include <intrin.h>
+#pragma intrinsic(_ReadWriteBarrier)
+#endif
 
 static gomp_mutex_t default_lock;
 
@@ -61,7 +64,11 @@ GOMP_critical_name_start (void **pptr)
   /* Otherwise we have to be prepared to malloc storage.  */
   else
     {
-      plock = *pptr;
+      plock = 
+#ifdef MSVC
+      (gomp_mutex_t*)
+#endif      
+      *pptr;
 
       if (plock == NULL)
 	{
@@ -79,12 +86,24 @@ GOMP_critical_name_start (void **pptr)
 	    plock = nlock;
 #else
 	  gomp_mutex_lock (&create_lock_lock);
-	  plock = *pptr;
+	  plock = 
+#ifdef MSVC
+          (gomp_mutex_t*)
+#endif    	  
+	  *pptr;
 	  if (plock == NULL)
 	    {
-	      plock = gomp_malloc (sizeof (gomp_mutex_t));
+	      plock = 
+	      #ifdef MSVC
+              (gomp_mutex_t*)
+	      #endif    
+	      gomp_malloc (sizeof (gomp_mutex_t));
 	      gomp_mutex_init (plock);
+	      #ifndef MSVC
 	      __sync_synchronize ();
+	      #else 
+	      _ReadWriteBarrier();
+	      #endif
 	      *pptr = plock;
 	    }
 	  gomp_mutex_unlock (&create_lock_lock);
@@ -106,8 +125,12 @@ GOMP_critical_name_end (void **pptr)
       && sizeof (gomp_mutex_t) <= sizeof (void *)
       && __alignof (gomp_mutex_t) <= sizeof (void *))
     plock = (gomp_mutex_t *)pptr;
-  else
-    plock = *pptr;
+  else  
+    plock = 
+#ifdef MSVC
+   (gomp_mutex_t *)
+#endif    
+    *pptr;
 
   gomp_mutex_unlock (plock);
 }
@@ -134,7 +157,10 @@ GOMP_atomic_end (void)
 }
 
 #if !GOMP_MUTEX_INIT_0
-static void __attribute__((constructor))
+static void 
+#ifndef MSVC
+__attribute__((constructor))
+#endif
 initialize_critical (void)
 {
   gomp_mutex_init (&default_lock);
@@ -143,4 +169,17 @@ initialize_critical (void)
   gomp_mutex_init (&create_lock_lock);
 #endif
 }
+
+#ifdef MSVC
+class INIT_CRITICAL
+{
+public:
+	INIT_CRITICAL(){
+	  initialize_critical();
+	}
+};
+/*Global Constructor*/
+INIT_CRITICAL init_critical;
+#endif
+
 #endif

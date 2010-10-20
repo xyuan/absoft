@@ -48,6 +48,15 @@
 # define strtoull(ptr, eptr, base) strtoul (ptr, eptr, base)
 #endif
 
+#ifdef MSVC
+struct gomp_task_icv gomp_global_icv = {
+  1,
+  GFS_DYNAMIC,
+  1,
+  false,
+  false
+};
+#else
 struct gomp_task_icv gomp_global_icv = {
   .nthreads_var = 1,
   .run_sched_var = GFS_DYNAMIC,
@@ -55,6 +64,7 @@ struct gomp_task_icv gomp_global_icv = {
   .dyn_var = false,
   .nest_var = false
 };
+#endif
 
 unsigned short *gomp_cpu_affinity;
 size_t gomp_cpu_affinity_len;
@@ -433,7 +443,11 @@ parse_affinity (void)
 	    allocated <<= 1;
 	  else
 	    allocated += 2 * needed;
-	  new_cpus = realloc (cpus, allocated * sizeof (unsigned short));
+	  new_cpus = 
+#ifdef MSVC
+	  (unsigned short *)
+#endif	  
+	  realloc (cpus, allocated * sizeof (unsigned short));
 	  if (new_cpus == NULL)
 	    {
 	      free (cpus);
@@ -469,7 +483,10 @@ parse_affinity (void)
   return false;
 }
 
-static void __attribute__((constructor))
+static void 
+#ifndef MSVC
+__attribute__((constructor))
+#endif
 initialize_env (void)
 {
   unsigned long stacksize;
@@ -545,6 +562,19 @@ initialize_env (void)
     }
 }
 
+#ifdef MSVC
+class INIT_ENV
+{
+public:
+   INIT_ENV(){
+   	initialize_env();
+   };
+   
+};
+/* Global constructor */
+INIT_ENV init_env;
+#endif
+
 
 /* The public OpenMP API routines that access these variables.  */
 
@@ -605,14 +635,22 @@ omp_set_schedule (omp_sched_t kind, int modifier)
     default:
       return;
     }
-  icv->run_sched_var = kind;
+  icv->run_sched_var = 
+#ifdef MSVC
+  (enum gomp_schedule_type)
+#endif  
+  kind;
 }
 
 void
 omp_get_schedule (omp_sched_t *kind, int *modifier)
 {
   struct gomp_task_icv *icv = gomp_icv (false);
-  *kind = icv->run_sched_var;
+  *kind =
+#ifdef MSVC
+  (omp_sched_t)
+#endif  
+   icv->run_sched_var;
   *modifier = icv->run_sched_modifier;
 }
 

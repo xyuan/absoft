@@ -31,13 +31,21 @@
 
 typedef struct { void *ptr; gomp_mutex_t lock; } gomp_ptrlock_t;
 
-static inline void gomp_ptrlock_init (gomp_ptrlock_t *ptrlock, void *ptr)
+static 
+#ifndef MSVC
+inline 
+#endif
+void gomp_ptrlock_init (gomp_ptrlock_t *ptrlock, void *ptr)
 {
   ptrlock->ptr = ptr;
   gomp_mutex_init (&ptrlock->lock);
 }
 
-static inline void *gomp_ptrlock_get (gomp_ptrlock_t *ptrlock)
+static 
+#ifndef MSVC
+inline 
+#endif
+void *gomp_ptrlock_get (gomp_ptrlock_t *ptrlock)
 {
   if (ptrlock->ptr != NULL)
     return ptrlock->ptr;
@@ -52,13 +60,21 @@ static inline void *gomp_ptrlock_get (gomp_ptrlock_t *ptrlock)
   return NULL;
 }
 
-static inline void gomp_ptrlock_set (gomp_ptrlock_t *ptrlock, void *ptr)
+static
+#ifndef MSVC
+inline 
+#endif
+void gomp_ptrlock_set (gomp_ptrlock_t *ptrlock, void *ptr)
 {
   ptrlock->ptr = ptr;
   gomp_mutex_unlock (&ptrlock->lock);
 }
 
-static inline void gomp_ptrlock_destroy (gomp_ptrlock_t *ptrlock)
+static
+#ifndef MSVC
+inline 
+#endif
+void gomp_ptrlock_destroy (gomp_ptrlock_t *ptrlock)
 {
   gomp_mutex_destroy (&ptrlock->lock);
 }
